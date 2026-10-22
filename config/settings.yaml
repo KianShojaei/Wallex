@@ -4,28 +4,69 @@
 challenge:
   initial_capital_tmn: 5000000          # evaluation base (5M TMN)
   quote_asset: TMN
-  # Official challenge window (Asia/Tehran). Agent liquidates ALL positions to TMN
-  # `liquidate_before_end_minutes` before `end`. Set these as soon as organizers announce them.
+  # Official challenge window (Asia/Tehran). The agent liquidates ALL positions to TMN
+  # `liquidate_before_end_minutes` before `end`. Set these as soon as the organizers announce them.
   start: "2026-10-23T09:00:00+03:30"
   end:   "2026-10-26T09:00:00+03:30"
   liquidate_before_end_minutes: 45
 
 markets:
   # Allowed markets list from the organizers. Only these symbols are ever traded.
-  allowed: [BTCTMN, ETHTMN, USDTTMN, SOLTMN, XRPTMN, DOGETMN, TRXTMN, BNBTMN]
-  # Liquidity filter applied on top of the allowed list (24h quote volume, TMN)
-  min_24h_quote_volume_tmn: 2000000000
-  max_spread_pct: 0.35                  # skip a market when (ask-bid)/mid is wider than this
+  allowed: [USDTTMN, BTCTMN, ETHTMN, SOLTMN, XRPTMN, DOGETMN, TRXTMN, BNBTMN]
+  min_24h_quote_volume_tmn: 2000000000  # liquidity filter on top of the allowed list
+  max_spread_pct: 0.35
 
 data:
-  resolution: "60"                      # Wallex UDF resolution: 1,5,15,30,60,180,360,720,D (minutes)
+  resolution: "60"                      # hourly closed bars drive every module
   fallback_resolution: "60"
   lookback_bars: 300
   candle_cache_dir: data/candles
 
 strategy:
-  name: "ai_gated_mean_reversion"
-  # --- deterministic signal layer (always runs, fully reproducible) ---
+  name: "currency_regime_core"
+  min_signal_score: 0.50                # rule-layer score needed before the AI is consulted
+  ai_enabled: true
+  ai_min_confidence: 0.60
+  regime_refresh_minutes: 60
+  modules:
+    # CORE - Toman-weakening regime -> hold USDT (see docs/research.md for the evidence)
+    carry:
+      enabled: true
+      symbol: USDTTMN
+      ema_hours: 72
+      momentum_hours: 24
+      momentum_on_pct: 0.3
+      momentum_off_pct: -0.3
+      min_score: 0.5
+      max_position_pct: 0.50            # core may use up to 50% of equity (<= risk.max_total_exposure_pct)
+      stop_loss_pct: 2.5                # tail protection only; regime exit is the normal way out
+      take_profit_pct: 0                # 0 = no fixed take-profit
+      trailing_pct: 0
+      max_holding_minutes: 0            # 0 = no time stop (challenge-end liquidation still applies)
+      allow_top_up: true                # may scale in later when AI/regime permit a larger size
+    # SATELLITE - crypto trend in USD terms. Off by default: negative after fees in Sep-Oct 2026 data.
+    trend:
+      enabled: false
+      ema_fast: 20
+      ema_slow: 100
+      breakout_bars: 24
+      exclude: [USDTTMN]
+      max_position_pct: 0.10
+      stop_loss_pct: 3.0
+      take_profit_pct: 4.0
+      max_holding_minutes: 4320
+    # LEGACY - mean reversion. Off: 0/648 parameter sets positive out-of-sample after fees.
+    mean_reversion:
+      enabled: false
+      rsi_oversold: 32
+      rsi_exit: 55
+      exclude: [USDTTMN]
+      max_position_pct: 0.10
+      stop_loss_pct: 1.0
+      take_profit_pct: 1.6
+      trailing_pct: 0.8
+      max_holding_minutes: 720
+  # indicator parameters shared by the feature layer
   rsi_period: 14
   rsi_oversold: 32
   rsi_exit: 55
@@ -33,35 +74,33 @@ strategy:
   bb_std: 2.0
   ema_fast: 20
   ema_slow: 50
-  trend_ema: 100                        # no longs when price < trend_ema AND ema_fast < ema_slow (strong downtrend)
+  trend_ema: 100
   atr_period: 14
-  volume_zscore_min: -1.0               # avoid dead markets
-  min_signal_score: 0.55                # 0..1 composite score threshold before AI is consulted
-  # --- AI layer ---
-  ai_enabled: true
-  ai_min_confidence: 0.60               # AI must be at least this confident to approve a trade
-  regime_refresh_minutes: 60
+  volume_zscore_min: -1.0
 
 risk:
-  max_position_pct: 0.20                # max 20% of equity in one position
-  max_total_exposure_pct: 0.40          # max 40% of equity deployed at once
+  max_position_pct: 0.20                # default cap for modules that do not set their own
+  max_total_exposure_pct: 0.50          # never more than half the account in the market
   max_open_positions: 2
-  stop_loss_pct: 1.0                    # hard stop below entry (fees included in PnL)
-  take_profit_pct: 1.6
-  trailing_stop_pct: 0.8                # activates once profit > take_profit/2
-  max_holding_minutes: 720              # time stop
-  daily_drawdown_halt_pct: 3.0          # stop opening new positions for the rest of the day
-  total_drawdown_kill_pct: 6.0          # liquidate & stop entirely
-  cooldown_after_loss_minutes: 90       # per symbol
-  min_order_notional_tmn: 300000        # never place dust orders
-  fee_pct: 0.25                         # taker fee assumption (overwritten by /v1/account/fee when live)
-  slippage_pct: 0.05                    # backtest/shadow fill assumption
+  stop_loss_pct: 2.0                    # defaults, overridden per module above
+  take_profit_pct: 0
+  trailing_stop_pct: 0
+  max_holding_minutes: 0
+  daily_drawdown_halt_pct: 2.0          # no new entries for the rest of the day
+  total_drawdown_kill_pct: 4.0          # flatten everything and stop
+  cooldown_after_loss_minutes: 360      # re-entry wait after a stop-out (per symbol)
+  top_up_cooldown_minutes: 360          # a module may add to an open position at most every 6h (if AI/regime allow a bigger size)
+  min_order_notional_tmn: 300000
+  fee_pct: 0.30                         # Wallex TMN markets: taker 0.30%
+  maker_fee_pct: 0.25                   #                     maker 0.25%  (live mode reads /v1/account/fee)
+  slippage_pct: 0.02                    # shadow/backtest fill assumption (USDTTMN spread is ~0.003%)
 
 execution:
   loop_interval_seconds: 60
-  order_type: LIMIT                     # LIMIT (marketable, price = best ask*(1+limit_offset)) or MARKET
+  order_type: LIMIT
+  order_style: maker                    # rest at best bid/ask first (0.25%), fall back to taker if unfilled
   limit_offset_pct: 0.10
-  order_timeout_seconds: 45             # cancel unfilled entry orders after this
+  order_timeout_seconds: 90
   state_dir: state
   decision_log_dir: logs/decisions
   ai_cache_dir: logs/ai_cache

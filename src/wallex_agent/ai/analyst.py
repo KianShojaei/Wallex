@@ -22,11 +22,33 @@ from wallex_agent.ai.llm import LLMClient
 from wallex_agent.strategy.signals import Signal
 
 SYSTEM = (
-    "You are the risk-aware trading analyst inside an automated spot-trading agent on the Iranian "
-    "exchange Wallex (quote currency Toman, TMN). Horizon: intraday to 12h. Long-only. Fees ~0.25%/side, "
-    "so a trade must plausibly earn >0.8%. Be conservative: capital preservation beats activity. "
-    "You never see news; reason only from the numbers given. Always answer with ONE JSON object only."
+    "You are the risk-aware analyst inside an automated spot-trading agent on the Iranian exchange Wallex "
+    "(quote currency Toman, TMN). Long-only. Fees ~0.25%/side, so a position must plausibly earn >0.6% net. "
+    "Be conservative: capital preservation beats activity, but do not reject a thesis that the numbers support. "
+    "Judge the candidate against ITS OWN strategy brief (given in the request), not against a generic dip-buying "
+    "template. Wallex reports zero volume for some overnight hours on USDTTMN; treat that as low activity, not as "
+    "stale or broken data. You never see news; reason only from the numbers given. Answer with ONE JSON object only."
 )
+
+# What each strategy module is trying to do: the analyst judges the candidate against this thesis.
+MODULE_BRIEFS = {
+    "carry": (
+        "CURRENCY-REGIME CORE. Thesis: the Toman is weakening, so holding USDT (USDTTMN rising) earns the FX drift. "
+        "Holding horizon 6h-3 days. This is a trend/continuation position, NOT a dip buy: being near the upper "
+        "Bollinger band or a high RSI is EXPECTED in this regime and is not by itself a reason to reject. Reject or "
+        "shrink when the regime looks exhausted or reversing: sharp parabolic spike likely to retrace, momentum fading "
+        "(24h/72h returns rolling over), price breaking below the 72h EMA, or volatility far above its norm. "
+        "Approve when the uptrend is orderly and intact. Stop-loss is a 2.5% tail guard; there is no take-profit."
+    ),
+    "trend": (
+        "CRYPTO TREND SATELLITE. Thesis: this coin is in an uptrend in USD terms AND the Toman is not strengthening. "
+        "Entry on EMA crossover / breakout. Judge trend quality and whether a 4% target vs 3% stop is realistic."
+    ),
+    "mean_reversion": (
+        "MEAN REVERSION. Thesis: oversold bounce (RSI low, below lower Bollinger band) in a non-collapsing market. "
+        "Reject if momentum is strongly negative or the bounce cannot clear fees."
+    ),
+}
 
 
 class Regime(BaseModel):
@@ -57,9 +79,12 @@ class Analyst:
         self.min_confidence = min_confidence
 
     # ------------------------------------------------------------ regime
-    def regime(self, symbol: str, snapshot: Dict, recent: List[Dict], mcp_context: Optional[Dict] = None) -> Optional[Regime]:
+    def regime(self, symbol: str, snapshot: Dict, recent: List[Dict], mcp_context: Optional[Dict] = None,
+               module: str = "carry") -> Optional[Regime]:
         user = {
-            "task": "Classify the current market regime for the next 1-12 hours and say whether mean-reversion LONG entries are sensible.",
+            "task": "Classify the current market regime for the next 6-72 hours and decide whether NEW entries for the "
+                    "strategy described in `strategy_brief` are sensible now (allow_entries) and at what size_factor (0..1).",
+            "strategy_brief": MODULE_BRIEFS.get(module, "generic long-only strategy"),
             "symbol": symbol,
             "latest": snapshot,
             "recent_hourly_bars_oldest_first": recent[-24:],
@@ -68,13 +93,15 @@ class Analyst:
         }
         msgs = [{"role": "system", "content": SYSTEM},
                 {"role": "user", "content": json.dumps(user, ensure_ascii=False)}]
-        return self.llm.complete_json(msgs, Regime, deep=True, tag=f"regime:{symbol}:{snapshot.get('time','')[:13]}")
+        return self.llm.complete_json(msgs, Regime, deep=True, tag=f"regime:{module}:{symbol}:{snapshot.get('time','')[:13]}")
 
     # ----------------------------------------------------------- decide
     def decide(self, signal: Signal, regime: Optional[Regime], portfolio: Dict, risk_defaults: Dict) -> Decision:
         user = {
-            "task": "A rule-based scanner produced a LONG entry candidate. Decide approve / approve_reduced / reject. "
-                    "You may shrink size or tighten the stop, never increase risk. Explain with the numbers.",
+            "task": "A rule-based scanner produced a LONG entry candidate for the strategy in `strategy_brief`. Decide "
+                    "approve / approve_reduced / reject. You may shrink size or tighten the stop, never increase risk. "
+                    "Explain with the numbers.",
+            "strategy_brief": MODULE_BRIEFS.get(signal.module, "generic long-only strategy"),
             "candidate": signal.to_dict(),
             "regime": regime.model_dump() if regime else "unknown",
             "portfolio": portfolio,

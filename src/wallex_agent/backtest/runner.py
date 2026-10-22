@@ -78,18 +78,20 @@ def run_backtest(s, symbols: List[str], start: Optional[str], end: Optional[str]
     end_dt = idx[-1].to_pydatetime()
     risk = RiskManager(s.risk, end_dt.astimezone(timezone.utc), liquidate_before_min=0)
     dlog = DecisionLog(str(out_dir), run_id="decisions", mode="backtest")
-    agent = Agent(s, pf, risk, analyst, SimulatedBroker(s.risk.fee_pct, s.risk.slippage_pct), dlog)
+    fee = s.risk.maker_fee_pct if s.execution.order_style == "maker" else s.risk.fee_pct
+    agent = Agent(s, pf, risk, analyst, SimulatedBroker(fee, s.risk.slippage_pct), dlog)
 
     warm = s.strategy.trend_ema
     eq_pts = []
     for ts in idx[warm:]:
         now = ts.timestamp()
-        snaps, prices, markets, recent = {}, {}, {}, {}
+        snaps, prices, markets, recent, frames = {}, {}, {}, {}, {}
         for sym, df in data.items():
             if ts not in df.index:
                 continue
             i = df.index.get_loc(ts)
             sub = df.iloc[: i + 1]
+            frames[sym] = sub
             snap = snapshot_from(sub, sym, spread_pct=0.1)
             if snap is None:
                 continue
@@ -100,7 +102,7 @@ def run_backtest(s, symbols: List[str], start: Optional[str], end: Optional[str]
                                for j, r in sub.tail(24).iterrows()]
         if not prices:
             continue
-        agent.step(now, snaps, prices, markets, recent)
+        agent.step(now, snaps, prices, markets, recent, frames=frames)
         eq_pts.append((ts, pf.equity(prices)))
     # force flat at the end (challenge rule: realized in TMN)
     if pf.positions:

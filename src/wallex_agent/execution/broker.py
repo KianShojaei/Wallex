@@ -83,10 +83,11 @@ class LiveBroker(Broker):
     name = "live"
 
     def __init__(self, client: WallexClient, fee_pct: float, order_type: str = "LIMIT", limit_offset_pct: float = 0.1,
-                 timeout_s: int = 45, poll_s: float = 2.0):
+                 timeout_s: int = 45, poll_s: float = 2.0, style: str = "maker"):
         super().__init__(fee_pct)
         self.c = client
         self.order_type = order_type
+        self.style = style            # maker: rest at our side of the book; taker: cross the spread by `offset`
         self.offset = limit_offset_pct
         self.timeout = timeout_s
         self.poll = poll_s
@@ -145,16 +146,35 @@ class LiveBroker(Broker):
 
     # -------------------------------------------------------------- api
     def buy(self, symbol, notional_tmn, market, ref_price):
-        px = None if self.order_type == "MARKET" else ref_price * (1 + self.offset / 100)
+        """ref_price = best ask. maker: rest at best bid (fills when someone sells to us); taker: ask + offset."""
+        if self.order_type == "MARKET":
+            px = None
+        elif self.style == "maker" and market.bid > 0:
+            px = market.bid
+        else:
+            px = ref_price * (1 + self.offset / 100)
         qty = round_down(notional_tmn / (px or ref_price), market.qty_precision)
         if qty <= 0 or qty < market.min_qty or qty * (px or ref_price) < market.min_notional:
             return Fill(False, "", symbol, "BUY", 0, ref_price, 0, 0, "REJECTED", error="below exchange minimum")
-        return self._submit(symbol, "BUY", qty, px, market)
+        fill = self._submit(symbol, "BUY", qty, px, market)
+        if not fill.ok and px is not None and self.style == "maker":
+            # maker order did not fill in time -> one taker attempt so the strategy is not starved
+            log.info("maker buy %s unfilled, retrying as taker", symbol)
+            fill = self._submit(symbol, "BUY", qty, ref_price * (1 + self.offset / 100), market)
+        return fill
 
     def sell(self, symbol, qty, market, ref_price):
-        px = None if self.order_type == "MARKET" else ref_price * (1 - self.offset / 100)
+        """ref_price = best bid. Exits must happen: maker first, then taker fallback."""
         qty = round_down(qty, market.qty_precision)
-        return self._submit(symbol, "SELL", qty, px, market)
+        if self.order_type == "MARKET":
+            return self._submit(symbol, "SELL", qty, None, market)
+        if self.style == "maker" and market.ask > 0:
+            fill = self._submit(symbol, "SELL", qty, market.ask, market)
+            if fill.ok:
+                return fill
+            log.info("maker sell %s unfilled, retrying as taker", symbol)
+            qty = round_down(qty - fill.qty, market.qty_precision) if fill.qty else qty
+        return self._submit(symbol, "SELL", qty, ref_price * (1 - self.offset / 100), market)
 
     def cancel_all(self, symbol=None):
         try:

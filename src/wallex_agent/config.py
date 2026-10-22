@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Literal
+from typing import Dict, List, Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -33,7 +33,8 @@ class DataCfg(BaseModel):
 
 
 class StrategyCfg(BaseModel):
-    name: str = "ai_gated_mean_reversion"
+    name: str = "currency_regime_core"
+    modules: Dict[str, dict] = Field(default_factory=lambda: {"carry": {"enabled": True}})
     rsi_period: int = 14
     rsi_oversold: float = 32
     rsi_exit: float = 55
@@ -61,14 +62,17 @@ class RiskCfg(BaseModel):
     daily_drawdown_halt_pct: float = 3.0
     total_drawdown_kill_pct: float = 6.0
     cooldown_after_loss_minutes: int = 90
+    top_up_cooldown_minutes: int = 360
     min_order_notional_tmn: float = 300_000
-    fee_pct: float = 0.25
+    fee_pct: float = 0.30
+    maker_fee_pct: float = 0.25
     slippage_pct: float = 0.05
 
 
 class ExecutionCfg(BaseModel):
     loop_interval_seconds: int = 60
     order_type: Literal["LIMIT", "MARKET"] = "LIMIT"
+    order_style: Literal["maker", "taker"] = "maker"   # maker: rest at best bid/ask (0.25%); taker: cross the spread (0.3%)
     limit_offset_pct: float = 0.10
     order_timeout_seconds: int = 45
     state_dir: str = "state"

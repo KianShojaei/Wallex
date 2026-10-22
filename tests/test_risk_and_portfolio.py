@@ -35,6 +35,7 @@ def test_exposure_cap_and_max_positions(settings):
     pf.positions["BTCTMN"] = Position("BTCTMN", 1, 1_000_000, now, 990_000, 1_016_000, 0.8, 1_000_000)
     pf.positions["ETHTMN"] = Position("ETHTMN", 1, 1_000_000, now, 990_000, 1_016_000, 0.8, 1_000_000)
     pf.cash_tmn = 3_000_000
+    pf.cash_tmn = 3_000_000
     prices = {"BTCTMN": 1_000_000, "ETHTMN": 1_000_000}
     eq = pf.mark(prices)
     ok, blocks = r.global_checks(pf, eq)
@@ -49,14 +50,14 @@ def test_exits_sl_tp_trailing_time_liquidation(settings):
     r = _risk(settings)
     now = time.time()
     pf = Portfolio(cash_tmn=0, initial_capital=5_000_000)
-    pf.positions["X"] = Position("X", 1, 100.0, now, 99.0, 101.6, 0.8, 100.0)
+    pf.positions["X"] = Position("X", 1, 100.0, now, 99.0, 101.6, 0.8, 100.0, max_holding_minutes=720)
     assert r.check_exits(pf, {"X": 98.9}, {}, now)[0].reason.startswith("stop-loss")
     assert r.check_exits(pf, {"X": 101.7}, {}, now)[0].reason.startswith("take-profit")
     pf.positions["X"].highest = 101.0
     assert r.check_exits(pf, {"X": 100.15}, {}, now)[0].reason.startswith("trailing")
     pf.positions["X"].highest = 100.0
-    assert r.check_exits(pf, {"X": 100.3}, {}, now + settings.risk.max_holding_minutes * 60 + 1)[0].reason.startswith("time stop")
-    assert r.check_exits(pf, {"X": 100.6}, {"X": "mean reverted"}, now)[0].reason == "mean reverted"
+    assert r.check_exits(pf, {"X": 100.3}, {}, now + 720 * 60 + 1)[0].reason.startswith("time stop")
+    assert r.check_exits(pf, {"X": 100.7}, {"X": "mean reverted"}, now)[0].reason == "mean reverted"
     assert not r.check_exits(pf, {"X": 100.3}, {}, now)
     r2 = RiskManager(settings.risk, datetime.now(timezone.utc) + timedelta(minutes=10), 45)
     assert "liquidation" in r2.check_exits(pf, {"X": 100.3}, {}, now)[0].reason

@@ -22,6 +22,10 @@ class Position:
     entry_order_id: str = ""
     decision_id: str = ""
     size_factor: float = 1.0
+    max_holding_minutes: int = 0
+    module: str = ""
+    last_add_time: float = 0.0
+    adds: int = 0
 
     @property
     def cost_tmn(self) -> float:

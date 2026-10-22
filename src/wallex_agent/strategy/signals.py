@@ -14,27 +14,12 @@ Strategy: *AI-gated mean reversion with trend filter* (long-only, spot).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict, field
-from typing import Dict, List, Optional
+from typing import Optional
 
 from wallex_agent.data.features import Snapshot
 
 
-@dataclass
-class Signal:
-    symbol: str
-    side: str                      # "BUY" (entry) or "SELL" (exit hint)
-    score: float                   # 0..1 composite confidence of the rule layer
-    reasons: List[str] = field(default_factory=list)
-    vetoes: List[str] = field(default_factory=list)
-    snapshot: Optional[Dict] = None
-
-    @property
-    def is_candidate(self) -> bool:
-        return not self.vetoes
-
-    def to_dict(self) -> Dict:
-        return asdict(self)
+from wallex_agent.strategy.base import Signal  # noqa: E402  (shared dataclass)
 
 
 def _clip(x: float, lo=0.0, hi=1.0) -> float:

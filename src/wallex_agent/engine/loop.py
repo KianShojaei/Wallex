@@ -30,18 +30,21 @@ def build_agent(s, mode: str, ai_mode: str = "live", mcp: bool = False):
         log.info("resumed portfolio state from %s (equity curve points: %d)", state_path, len(pf.equity_curve))
     else:
         pf = Portfolio(cash_tmn=s.challenge.initial_capital_tmn, initial_capital=s.challenge.initial_capital_tmn)
-    fee = s.risk.fee_pct
+    fee = s.risk.maker_fee_pct if s.execution.order_style == "maker" else s.risk.fee_pct
     if mode == "live":
         try:
             bal = client.balances()
             pf.cash_tmn = bal.get(s.challenge.quote_asset, {}).get("free", pf.cash_tmn)
             fees = client.fees()
-            if fees:
-                fee = max(v["taker"] for v in fees.values() if v["taker"] > 0) or fee
+            tmn = {k: v for k, v in fees.items() if k.endswith(s.challenge.quote_asset) and v["taker"] > 0}
+            if tmn:
+                key = "maker" if s.execution.order_style == "maker" else "taker"
+                fee = max(v[key] for v in tmn.values()) or fee
             log.info("live account: %s=%.0f, taker fee=%.3f%%", s.challenge.quote_asset, pf.cash_tmn, fee)
         except WallexError as e:
             log.error("cannot read live account: %s", e); raise
-        broker = LiveBroker(client, fee, s.execution.order_type, s.execution.limit_offset_pct, s.execution.order_timeout_seconds)
+        broker = LiveBroker(client, fee, s.execution.order_type, s.execution.limit_offset_pct, s.execution.order_timeout_seconds,
+                            style=s.execution.order_style)
     else:
         broker = SimulatedBroker(fee, s.risk.slippage_pct)
     analyst = None
@@ -106,6 +109,7 @@ def run(s, mode: str, ai_mode: str = "live", once: bool = False, mcp: bool = Fal
             snaps: Dict[str, Snapshot] = {}
             prices: Dict[str, float] = {}
             recent: Dict[str, List[Dict]] = {}
+            frames: Dict = {}
             for sym in set(universe) | set(agent.pf.positions):
                 m = markets.get(sym)
                 if not m:
@@ -114,6 +118,7 @@ def run(s, mode: str, ai_mode: str = "live", once: bool = False, mcp: bool = Fal
                 if df.empty:
                     continue
                 df = compute_indicators(df, s.strategy)
+                frames[sym] = df
                 prices[sym] = m.mid if m.mid > 0 else float(df["close"].iloc[-1])
                 imb = None
                 try:
@@ -127,7 +132,7 @@ def run(s, mode: str, ai_mode: str = "live", once: bool = False, mcp: bool = Fal
                     snaps[sym] = snap
                     recent[sym] = [{"t": str(i)[:16], "o": float(r.open), "h": float(r.high), "l": float(r.low), "c": float(r.close), "v": float(r.volume)}
                                    for i, r in df.tail(24).iterrows()]
-            res = agent.step(t0, snaps, prices, markets, recent)
+            res = agent.step(t0, snaps, prices, markets, recent, frames=frames)
             agent.pf.save(state_path)
             summ = agent.pf.summary(prices)
             log.info("loop ok | equity=%s TMN (%.2f%%) | pos=%d | entries=%s exits=%s | ai_calls=%d cost=$%.4f",

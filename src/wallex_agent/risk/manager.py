@@ -28,6 +28,7 @@ class EntryPlan:
     trailing_pct: float
     size_factor: float
     notes: List[str]
+    max_holding_minutes: int = 0
 
 
 @dataclass
@@ -71,30 +72,48 @@ class RiskManager:
     # ------------------------------------------------------------ sizing
     def plan_entry(self, symbol: str, pf: Portfolio, equity: float, prices: Dict[str, float], ai_size_factor: float,
                    ai_stop: Optional[float], ai_tp: Optional[float], atr_pct: float, regime_size_factor: float = 1.0,
-                   now: Optional[float] = None) -> Tuple[Optional[EntryPlan], List[str]]:
+                   now: Optional[float] = None, overrides: Optional[Dict] = None) -> Tuple[Optional[EntryPlan], List[str]]:
+        """`overrides` come from the strategy module (per-module caps/stops); global limits always win."""
         now = now or time.time()
+        ov = overrides or {}
         notes: List[str] = []
-        if symbol in pf.positions:
+        existing = pf.positions.get(symbol)
+        if existing is not None and not ov.get("allow_top_up"):
             return None, ["already in position"]
         lt = pf.last_loss_time.get(symbol)
         if lt and now - lt < self.cfg.cooldown_after_loss_minutes * 60:
             return None, [f"cooldown after loss ({int((now - lt) / 60)}m < {self.cfg.cooldown_after_loss_minutes}m)"]
         # volatility scaling: target ~1% move per ATR unit; shrink when ATR% is high
         vol_factor = min(1.0, 1.0 / max(atr_pct, 0.5))
-        size_factor = max(0.0, min(1.0, ai_size_factor)) * max(0.0, min(1.0, regime_size_factor)) * vol_factor
-        notes.append(f"size_factor = ai {ai_size_factor:.2f} x regime {regime_size_factor:.2f} x vol {vol_factor:.2f} = {size_factor:.2f}")
-        max_pos = equity * self.cfg.max_position_pct
+        # the per-candidate AI decision already saw the regime, so take the stricter of the two instead of compounding them
+        ai_f = max(0.0, min(1.0, min(ai_size_factor, regime_size_factor)))
+        size_factor = ai_f * vol_factor
+        notes.append(f"size_factor = min(ai {ai_size_factor:.2f}, regime {regime_size_factor:.2f}) x vol {vol_factor:.2f} = {size_factor:.2f}")
+        cap_pct = self.cfg.max_position_pct
+        if ov.get("max_position_pct"):
+            cap_pct = min(float(ov["max_position_pct"]), self.cfg.max_total_exposure_pct)   # a module may raise its own cap up to the exposure cap
+            notes.append(f"module position cap {cap_pct:.0%}")
+        max_pos = equity * cap_pct
         room = equity * self.cfg.max_total_exposure_pct - pf.exposure_tmn(prices)
-        notional = min(max_pos * size_factor, room, pf.cash_tmn * 0.98)
+        target = max_pos * size_factor
+        if existing is not None:
+            held = existing.qty * prices.get(symbol, existing.entry_price)
+            if now - getattr(existing, "last_add_time", existing.entry_time) < self.cfg.top_up_cooldown_minutes * 60:
+                return None, [f"top-up cooldown ({self.cfg.top_up_cooldown_minutes}m)"]
+            target = target - held
+            notes.append(f"top-up: target {max_pos * size_factor:,.0f} - held {held:,.0f} = {target:,.0f}")
+        notional = min(target, room, pf.cash_tmn * 0.98)
         if notional < self.cfg.min_order_notional_tmn:
             return None, notes + [f"notional {notional:,.0f} < min {self.cfg.min_order_notional_tmn:,.0f} (room {room:,.0f}, cash {pf.cash_tmn:,.0f})"]
-        sl = self.cfg.stop_loss_pct
+        sl = float(ov["stop_loss_pct"]) if ov.get("stop_loss_pct") is not None else self.cfg.stop_loss_pct
         if ai_stop is not None and ai_stop < sl:
             sl = max(0.3, ai_stop); notes.append(f"AI tightened stop to {sl}%")
-        tp = self.cfg.take_profit_pct
-        if ai_tp is not None and 0.5 <= ai_tp <= self.cfg.take_profit_pct * 1.5:
+        tp = float(ov["take_profit_pct"]) if ov.get("take_profit_pct") is not None else self.cfg.take_profit_pct
+        if ai_tp is not None and tp and 0.5 <= ai_tp <= tp * 1.5:
             tp = ai_tp; notes.append(f"AI set take-profit {tp}%")
-        return EntryPlan(symbol, round(notional), sl, tp, self.cfg.trailing_stop_pct, size_factor, notes), notes
+        trail = float(ov["trailing_pct"]) if ov.get("trailing_pct") is not None else self.cfg.trailing_stop_pct
+        hold = int(ov["max_holding_minutes"]) if ov.get("max_holding_minutes") is not None else self.cfg.max_holding_minutes
+        return EntryPlan(symbol, round(notional), sl, tp, trail, size_factor, notes, hold), notes
 
     # ------------------------------------------------------------ exits
     def check_exits(self, pf: Portfolio, prices: Dict[str, float], rule_exit_hints: Dict[str, str],
@@ -113,14 +132,15 @@ class RiskManager:
                 out.append(ExitOrder(sym, "kill switch: flatten")); continue
             if px <= p.stop_loss:
                 out.append(ExitOrder(sym, f"stop-loss hit ({px:,.0f} <= {p.stop_loss:,.0f})")); continue
-            if px >= p.take_profit:
+            if p.take_profit > p.entry_price and px >= p.take_profit:
                 out.append(ExitOrder(sym, f"take-profit hit ({px:,.0f} >= {p.take_profit:,.0f})")); continue
             gain_pct = (p.highest / p.entry_price - 1) * 100
-            tp_pct = (p.take_profit / p.entry_price - 1) * 100
-            if gain_pct >= tp_pct / 2 and px <= p.highest * (1 - p.trailing_pct / 100):
+            tp_pct = (p.take_profit / p.entry_price - 1) * 100 if p.take_profit > p.entry_price else 2.0
+            if p.trailing_pct > 0 and gain_pct >= tp_pct / 2 and px <= p.highest * (1 - p.trailing_pct / 100):
                 out.append(ExitOrder(sym, f"trailing stop ({p.trailing_pct}% off high {p.highest:,.0f})")); continue
-            if now - p.entry_time >= self.cfg.max_holding_minutes * 60:
-                out.append(ExitOrder(sym, f"time stop ({self.cfg.max_holding_minutes}m)")); continue
+            hold = p.max_holding_minutes if p.max_holding_minutes else self.cfg.max_holding_minutes
+            if hold > 0 and now - p.entry_time >= hold * 60:
+                out.append(ExitOrder(sym, f"time stop ({hold}m)")); continue
             if sym in rule_exit_hints and px > p.entry_price * (1 + 2 * self.cfg.fee_pct / 100):
                 out.append(ExitOrder(sym, rule_exit_hints[sym]))
         return out
@@ -131,6 +151,7 @@ class RiskManager:
         now = now or time.time()
         return Position(symbol=symbol, qty=qty, entry_price=fill_price, entry_time=now,
                         stop_loss=fill_price * (1 - plan.stop_loss_pct / 100),
-                        take_profit=fill_price * (1 + plan.take_profit_pct / 100),
-                        trailing_pct=plan.trailing_pct, highest=fill_price, entry_fee_tmn=fee_tmn,
-                        entry_order_id=order_id, decision_id=decision_id, size_factor=plan.size_factor)
+                        take_profit=fill_price * (1 + plan.take_profit_pct / 100) if plan.take_profit_pct else 0.0,
+                        trailing_pct=plan.trailing_pct or 0.0, highest=fill_price, entry_fee_tmn=fee_tmn,
+                        entry_order_id=order_id, decision_id=decision_id, size_factor=plan.size_factor,
+                        max_holding_minutes=plan.max_holding_minutes or 0)

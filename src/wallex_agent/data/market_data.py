@@ -35,6 +35,23 @@ def udf_to_df(payload: dict) -> pd.DataFrame:
     return df[~df.index.duplicated(keep="last")]
 
 
+def resample_ohlcv(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
+    if df.empty:
+        return df
+    return df.resample(f"{minutes}min").agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna()
+
+
+def ensure_resolution(df: pd.DataFrame, resolution: str) -> pd.DataFrame:
+    """Wallex UDF may answer a coarse request with finer bars (e.g. '15' -> 1-minute); normalise."""
+    if len(df) < 3 or str(resolution) == "1":
+        return df
+    want = resolution_seconds(resolution)
+    spacing = (df.index.to_series().diff().dt.total_seconds()).median()
+    if spacing and spacing < want * 0.9:
+        return resample_ohlcv(df, want // 60)
+    return df
+
+
 class CandleStore:
     def __init__(self, cache_dir: str = "data/candles"):
         self.dir = Path(cache_dir)
@@ -80,7 +97,7 @@ class MarketData:
         end_ts = int(end_ts or time.time())
         start_ts = end_ts - bars * resolution_seconds(res)
         try:
-            df = udf_to_df(self.client.candles(symbol, res, start_ts, end_ts))
+            df = ensure_resolution(udf_to_df(self.client.candles(symbol, res, start_ts, end_ts)), res)
         except WallexError as e:
             log.warning("candles %s@%s failed: %s", symbol, res, e)
             df = udf_to_df({})
@@ -106,6 +123,7 @@ class MarketData:
             cur = nxt
         df = pd.concat(frames) if frames else udf_to_df({})
         df = df[~df.index.duplicated(keep="last")].sort_index() if len(df) else df
+        df = ensure_resolution(df, res)
         if len(df):
             self.store.merge(symbol, res, df)
         return df
