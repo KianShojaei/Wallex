@@ -1,0 +1,67 @@
+# ===================== Wallex Agent configuration =====================
+# Everything the judges need to reproduce a run lives in this file + .env.
+
+challenge:
+  initial_capital_tmn: 5000000          # evaluation base (5M TMN)
+  quote_asset: TMN
+  # Official challenge window (Asia/Tehran). Agent liquidates ALL positions to TMN
+  # `liquidate_before_end_minutes` before `end`. Set these as soon as organizers announce them.
+  start: "2026-10-23T09:00:00+03:30"
+  end:   "2026-10-26T09:00:00+03:30"
+  liquidate_before_end_minutes: 45
+
+markets:
+  # Allowed markets list from the organizers. Only these symbols are ever traded.
+  allowed: [BTCTMN, ETHTMN, USDTTMN, SOLTMN, XRPTMN, DOGETMN, TRXTMN, BNBTMN]
+  # Liquidity filter applied on top of the allowed list (24h quote volume, TMN)
+  min_24h_quote_volume_tmn: 2000000000
+  max_spread_pct: 0.35                  # skip a market when (ask-bid)/mid is wider than this
+
+data:
+  resolution: "60"                      # Wallex UDF resolution: 1,5,15,30,60,180,360,720,D (minutes)
+  fallback_resolution: "60"
+  lookback_bars: 300
+  candle_cache_dir: data/candles
+
+strategy:
+  name: "ai_gated_mean_reversion"
+  # --- deterministic signal layer (always runs, fully reproducible) ---
+  rsi_period: 14
+  rsi_oversold: 32
+  rsi_exit: 55
+  bb_period: 20
+  bb_std: 2.0
+  ema_fast: 20
+  ema_slow: 50
+  trend_ema: 100                        # no longs when price < trend_ema AND ema_fast < ema_slow (strong downtrend)
+  atr_period: 14
+  volume_zscore_min: -1.0               # avoid dead markets
+  min_signal_score: 0.55                # 0..1 composite score threshold before AI is consulted
+  # --- AI layer ---
+  ai_enabled: true
+  ai_min_confidence: 0.60               # AI must be at least this confident to approve a trade
+  regime_refresh_minutes: 60
+
+risk:
+  max_position_pct: 0.20                # max 20% of equity in one position
+  max_total_exposure_pct: 0.40          # max 40% of equity deployed at once
+  max_open_positions: 2
+  stop_loss_pct: 1.0                    # hard stop below entry (fees included in PnL)
+  take_profit_pct: 1.6
+  trailing_stop_pct: 0.8                # activates once profit > take_profit/2
+  max_holding_minutes: 720              # time stop
+  daily_drawdown_halt_pct: 3.0          # stop opening new positions for the rest of the day
+  total_drawdown_kill_pct: 6.0          # liquidate & stop entirely
+  cooldown_after_loss_minutes: 90       # per symbol
+  min_order_notional_tmn: 300000        # never place dust orders
+  fee_pct: 0.25                         # taker fee assumption (overwritten by /v1/account/fee when live)
+  slippage_pct: 0.05                    # backtest/shadow fill assumption
+
+execution:
+  loop_interval_seconds: 60
+  order_type: LIMIT                     # LIMIT (marketable, price = best ask*(1+limit_offset)) or MARKET
+  limit_offset_pct: 0.10
+  order_timeout_seconds: 45             # cancel unfilled entry orders after this
+  state_dir: state
+  decision_log_dir: logs/decisions
+  ai_cache_dir: logs/ai_cache

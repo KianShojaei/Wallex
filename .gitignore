@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+# runtime state and raw data (decision logs ARE a deliverable: keep logs/decisions/*.jsonl tracked by hand when submitting)
+data/candles/*.csv
+data/candles/*.parquet
+state/
+logs/*.log
+logs/ai_cache/
+logs/backtests/
+logs/decisions/backtest_*

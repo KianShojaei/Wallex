@@ -1,0 +1,12 @@
+# Stable 3-day run: auto-restart on crash, state/logs persisted on the host.
+services:
+  agent:
+    build: .
+    env_file: .env
+    command: ["run", "--mode", "${RUN_MODE:-shadow}", "--ai", "live", "-y"]
+    restart: unless-stopped
+    volumes:
+      - ./state:/app/state
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./config:/app/config:ro
