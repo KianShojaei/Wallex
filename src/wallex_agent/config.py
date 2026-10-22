@@ -21,8 +21,13 @@ class ChallengeCfg(BaseModel):
 
 class MarketsCfg(BaseModel):
     allowed: List[str]
+    blocked_file: str = "config/blocked_markets.yaml"   # organisers' list of markets disabled in the credit account
+    blocked: List[str] = Field(default_factory=list)      # filled from blocked_file at load time (symbols without '/')
     min_24h_quote_volume_tmn: float = 0
     max_spread_pct: float = 0.35
+
+    def is_blocked(self, symbol: str) -> bool:
+        return symbol.replace("/", "").upper() in {b.replace("/", "").upper() for b in self.blocked}
 
 
 class DataCfg(BaseModel):
@@ -120,4 +125,14 @@ def load_settings(config_path: str | os.PathLike | None = None, env_file: str = 
         ai_model_deep=os.getenv("AI_MODEL_DEEP", "openai/gpt-6-sol"),
         run_mode=os.getenv("RUN_MODE", "shadow"),
     )
-    return Settings(**raw)
+    st = Settings(**raw)
+    bf = Path(st.markets.blocked_file)
+    if not bf.is_absolute():
+        bf = path.parent.parent / bf if (path.parent.parent / bf).exists() else bf
+    if bf.exists():
+        with open(bf, "r", encoding="utf-8") as f:
+            st.markets.blocked = [str(x).replace("/", "").upper() for x in (yaml.safe_load(f) or {}).get("blocked", [])]
+    bad = [a for a in st.markets.allowed if st.markets.is_blocked(a)]
+    if bad:
+        raise ValueError(f"markets.allowed contains markets disabled by the organisers: {bad}")
+    return st

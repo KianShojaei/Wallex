@@ -82,3 +82,11 @@ def test_portfolio_persistence(tmp_path: Path):
     pf.save(tmp_path / "p.json")
     pf2 = Portfolio.load(tmp_path / "p.json")
     assert pf2.positions["A"].qty == 2 and pf2.cash_tmn == 1
+
+
+def test_blocked_markets_loaded_and_enforced(settings):
+    assert settings.markets.blocked, "organiser block list should load from config/blocked_markets.yaml"
+    assert settings.markets.is_blocked("APTTMN") and settings.markets.is_blocked("APT/TMN")
+    assert not settings.markets.is_blocked("USDTTMN") and not settings.markets.is_blocked("BTCUSDT")
+    for sym in settings.markets.allowed:
+        assert not settings.markets.is_blocked(sym)

@@ -74,6 +74,8 @@ def _git_commit() -> str:
 def select_universe(markets: Dict, s) -> List[str]:
     out = []
     for sym in s.markets.allowed:
+        if s.markets.is_blocked(sym):
+            log.error("market %s is disabled in the challenge account; skipping", sym); continue
         m = markets.get(sym)
         if not m:
             log.warning("allowed market %s not found on exchange", sym); continue

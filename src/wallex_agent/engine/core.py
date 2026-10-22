@@ -151,7 +151,14 @@ class Agent:
         return summary
 
     # ----------------------------------------------------------------- execution
+    def _tradable(self, symbol: str) -> bool:
+        """Challenge compliance: only whitelisted, non-blocked spot markets may ever receive an order."""
+        return symbol in self.s.markets.allowed and not self.s.markets.is_blocked(symbol)
+
     def _open(self, sig, plan, notes, decision, regime, rationale, prices, markets, now):
+        if not self._tradable(sig.symbol):
+            self.log.write("reject", now=now, symbol=sig.symbol, stage="compliance", reason="market not allowed in the challenge account")
+            return
         m = markets[sig.symbol]
         ref = m.ask if m.ask > 0 else prices[sig.symbol]
         fill = self.broker.buy(sig.symbol, plan.notional_tmn, m, ref)
