@@ -41,6 +41,7 @@ def build_agent(s, mode: str, ai_mode: str = "live", mcp: bool = False):
                 key = "maker" if s.execution.order_style == "maker" else "taker"
                 fee = max(v[key] for v in tmn.values()) or fee
             log.info("live account: %s=%.0f, taker fee=%.3f%%", s.challenge.quote_asset, pf.cash_tmn, fee)
+            reconcile_positions(s, client, pf, bal)
         except WallexError as e:
             log.error("cannot read live account: %s", e); raise
         broker = LiveBroker(client, fee, s.execution.order_type, s.execution.limit_offset_pct, s.execution.order_timeout_seconds,
@@ -60,6 +61,75 @@ def build_agent(s, mode: str, ai_mode: str = "live", mcp: bool = False):
     md = MarketData(client, CandleStore(s.data.candle_cache_dir), s.data.resolution, s.data.fallback_resolution, s.data.lookback_bars)
     mcp_bridge = WallexMCP(api_key=s.wallex_api_key) if mcp else None
     return client, agent, md, state_path, mcp_bridge
+
+
+def reconcile_positions(s, client: WallexClient, pf: Portfolio, balances: Dict) -> None:
+    """Make the portfolio match the EXCHANGE, which is the source of truth.
+
+    If the state file was lost (redeploy without a persistent disk) or an order was filled outside a loop,
+    coins held on the exchange would otherwise be invisible to the agent and missing from equity. For every
+    held base asset of an allowed market we (re)build the position: quantity from the balance, entry price
+    from the average of our recent BUY fills on that market (falls back to the current mid), stop/take-profit
+    from the module config. Recorded positions whose coins are gone are dropped.
+    """
+    from wallex_agent.portfolio.state import Position
+    quote = s.challenge.quote_asset
+    try:
+        markets = client.markets()
+    except WallexError as e:
+        log.warning("reconcile: cannot load markets (%s)", e); return
+    carry_cfg = (s.strategy.modules or {}).get("carry") or {}
+    carry_sym = carry_cfg.get("symbol", "")
+    now = time.time()
+    seen = set()
+    for asset, b in balances.items():
+        if asset == quote:
+            continue
+        qty = float(b.get("value") or 0.0)
+        sym = f"{asset}{quote}"
+        m = markets.get(sym)
+        if not m or qty <= 0:
+            continue
+        value = qty * (m.mid or m.last)
+        if value < s.risk.min_order_notional_tmn * 0.5:
+            continue                                     # dust (e.g. leftovers below the exchange minimum)
+        seen.add(sym)
+        if sym in pf.positions:
+            p = pf.positions[sym]
+            if abs(p.qty - qty) / max(qty, 1e-12) > 0.001:
+                log.warning("reconcile %s: recorded qty %.8f != exchange %.8f -> using exchange", sym, p.qty, qty)
+                p.qty = qty
+            continue
+        # unknown holding -> rebuild from our own fills
+        entry = m.mid or m.last
+        try:
+            buys = [t for t in client.my_trades(sym) if str(t.get("side", t.get("isBuyer", ""))).upper() in ("BUY", "TRUE")]
+            q_acc = 0.0; cost = 0.0
+            for t in buys[:50]:
+                tq = float(t.get("quantity") or t.get("qty") or 0); tp = float(t.get("price") or 0)
+                if tq <= 0 or tp <= 0:
+                    continue
+                take = min(tq, qty - q_acc)
+                q_acc += take; cost += take * tp
+                if q_acc >= qty * 0.999:
+                    break
+            if q_acc > 0:
+                entry = cost / q_acc
+        except WallexError as e:
+            log.warning("reconcile %s: cannot read trades (%s); using mid price as entry", sym, e)
+        is_carry = sym == carry_sym
+        sl_pct = float(carry_cfg.get("stop_loss_pct", s.risk.stop_loss_pct)) if is_carry else s.risk.stop_loss_pct
+        tp_pct = float(carry_cfg.get("take_profit_pct", 0) or 0) if is_carry else (s.risk.take_profit_pct or 0)
+        pf.positions[sym] = Position(symbol=sym, qty=qty, entry_price=entry, entry_time=now,
+                                     stop_loss=entry * (1 - sl_pct / 100), take_profit=entry * (1 + tp_pct / 100) if tp_pct else 0.0,
+                                     trailing_pct=0.0, highest=max(entry, m.mid or entry), entry_fee_tmn=0.0,
+                                     entry_order_id="reconciled", decision_id="reconciled", module="carry" if is_carry else "",
+                                     last_add_time=now)
+        log.warning("reconcile: rebuilt position %s qty=%.8f entry=%.0f value=%.0f TMN (state was missing it)", sym, qty, entry, value)
+    for sym in list(pf.positions):
+        if sym not in seen:
+            log.warning("reconcile: %s recorded but no coins on the exchange -> dropping record", sym)
+            del pf.positions[sym]
 
 
 def write_status(s, mode, agent, prices, markets, snaps, summ, res, t0, state_dir: Path) -> None:

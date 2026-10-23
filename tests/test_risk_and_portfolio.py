@@ -98,3 +98,28 @@ def test_data_dir_relocates_writable_paths(tmp_path, monkeypatch):
     st = load_settings("config/settings.yaml", env_file="/nonexistent.env")
     assert st.execution.state_dir.startswith(str(tmp_path / "disk"))
     assert (tmp_path / "disk" / "logs" / "decisions").is_dir() and (tmp_path / "disk" / "candles").is_dir()
+
+
+def test_reconcile_rebuilds_missing_position(settings):
+    """State lost on redeploy: coins on the exchange must become positions again (exchange is the source of truth)."""
+    from wallex_agent.engine.loop import reconcile_positions
+    from wallex_agent.wallex.client import MarketInfo
+
+    class FakeClient:
+        def markets(self):
+            return {"XAUTTMN": MarketInfo("XAUTTMN", "XAUT", "TMN", 0, 5, 1e-5, 50000, 1_100_000_000, 1_101_000_000, 1_100_500_000, 1e12, 0.0, {})}
+        def my_trades(self, sym):
+            return [{"side": "BUY", "quantity": "0.00113", "price": "1095000000"}, {"side": "SELL", "quantity": "0.5", "price": "1"}]
+
+    pf = Portfolio(cash_tmn=1_344_443, initial_capital=5_000_000)
+    reconcile_positions(settings, FakeClient(), pf, {"TMN": {"value": 1_344_443}, "XAUT": {"value": 0.00113}, "USDC": {"value": 0.00673}})
+    assert "XAUTTMN" in pf.positions and "USDCTMN" not in pf.positions          # dust ignored
+    p = pf.positions["XAUTTMN"]
+    assert p.qty == 0.00113 and abs(p.entry_price - 1_095_000_000) < 1 and p.module == "carry"
+    assert abs(p.stop_loss - 1_095_000_000 * 0.975) < 1
+    assert abs(pf.equity({"XAUTTMN": 1_100_500_000}) - (1_344_443 + 0.00113 * 1_100_500_000)) < 1
+    # recorded position with no coins is dropped; mismatched qty is corrected
+    pf.positions["BTCTMN"] = Position("BTCTMN", 1, 1, 0, 0, 0, 0, 1)
+    pf.positions["XAUTTMN"].qty = 0.002
+    reconcile_positions(settings, FakeClient(), pf, {"XAUT": {"value": 0.00113}})
+    assert "BTCTMN" not in pf.positions and pf.positions["XAUTTMN"].qty == 0.00113
