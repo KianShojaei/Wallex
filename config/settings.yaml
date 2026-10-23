@@ -6,8 +6,9 @@ challenge:
   quote_asset: TMN
   # Official challenge window (Asia/Tehran). The agent liquidates ALL positions to TMN
   # `liquidate_before_end_minutes` before `end`. Set these as soon as the organizers announce them.
-  start: "2026-10-23T09:00:00+03:30"
-  end:   "2026-10-26T09:00:00+03:30"
+  # Account activated 1405/08/01 10:17:52 Tehran = 2026-10-23 10:17:52 +03:30; challenge = 72 hours.
+  start: "2026-10-23T10:17:52+03:30"
+  end:   "2026-10-26T10:17:52+03:30"
   liquidate_before_end_minutes: 45
 
 markets:
@@ -16,7 +17,8 @@ markets:
   # We deliberately trade only this liquid TMN whitelist (none of them is blocked):
   # NOTE: USDTTMN is READ (regime signal) but the challenge account rejects orders on it (verified 2026-10-23),
   # so it is deliberately NOT in this list. XAUTTMN (Tether Gold) is the tradable carrier of the Toman regime.
-  allowed: [XAUTTMN, BTCTMN, ETHTMN, SOLTMN, XRPTMN, DOGETMN, TRXTMN, BNBTMN]
+  # Only the carrier is traded while the satellite modules are disabled; keep the loop lean.
+  allowed: [XAUTTMN]
   # symbols that are only observed, never traded
   observe: [USDTTMN]
   blocked_file: config/blocked_markets.yaml
@@ -103,7 +105,9 @@ risk:
   min_order_notional_tmn: 300000
   fee_pct: 0.30                         # Wallex TMN markets: taker 0.30%
   maker_fee_pct: 0.20                   #                     maker 0.20% (verified from a live fill; live mode reads /v1/account/fee)
-  slippage_pct: 0.02                    # shadow/backtest fill assumption (USDTTMN spread is ~0.003%)
+  fee_overrides:                        # per-market coefficients seen in live fills (fills[].makerFeeCoefficient)
+    XAUTTMN: {maker: 0.0, taker: 0.3}   # Tether Gold: maker orders are free on this account
+  slippage_pct: 0.03                    # shadow/backtest fill assumption (XAUTTMN spread ~0.07%, we rest as maker)
 
 execution:
   loop_interval_seconds: 60

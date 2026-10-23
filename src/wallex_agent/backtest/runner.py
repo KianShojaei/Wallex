@@ -78,8 +78,9 @@ def run_backtest(s, symbols: List[str], start: Optional[str], end: Optional[str]
     end_dt = idx[-1].to_pydatetime()
     risk = RiskManager(s.risk, end_dt.astimezone(timezone.utc), liquidate_before_min=0)
     dlog = DecisionLog(str(out_dir), run_id="decisions", mode="backtest")
-    fee = s.risk.maker_fee_pct if s.execution.order_style == "maker" else s.risk.fee_pct
-    agent = Agent(s, pf, risk, analyst, SimulatedBroker(fee, s.risk.slippage_pct), dlog)
+    style = s.execution.order_style
+    fee = s.risk.fee_for("", style)
+    agent = Agent(s, pf, risk, analyst, SimulatedBroker(fee, s.risk.slippage_pct, lambda sym: s.risk.fee_for(sym, style)), dlog)
 
     warm = s.strategy.trend_ema
     eq_pts = []

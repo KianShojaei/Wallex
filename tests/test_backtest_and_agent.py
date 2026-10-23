@@ -14,6 +14,7 @@ MR_ONLY = {"mean_reversion": {"enabled": True, "exclude": ["USDTTMN"], "max_posi
 
 def test_backtest_end_to_end_rule_only(settings, tmp_path):
     settings.strategy.modules = MR_ONLY
+    settings.markets.allowed = ["BTCTMN", "ETHTMN"]
     frames = {"BTCTMN": synthetic_candles(seed=3), "ETHTMN": synthetic_candles(seed=5, start_price=50_000.0)}
     settings.data.candle_cache_dir = str(tmp_path / "c")
     r = run_backtest(settings, list(frames), None, None, ai_mode="off", out_root=str(tmp_path / "bt"), frames=frames)
@@ -33,6 +34,7 @@ def test_backtest_end_to_end_rule_only(settings, tmp_path):
 
 def test_backtest_is_reproducible(settings, tmp_path):
     settings.strategy.modules = MR_ONLY
+    settings.markets.allowed = ["BTCTMN"]
     frames = {"BTCTMN": synthetic_candles(seed=3)}
     a = run_backtest(settings, ["BTCTMN"], None, None, "off", out_root=str(tmp_path / "a"), frames=frames).metrics
     b = run_backtest(settings, ["BTCTMN"], None, None, "off", out_root=str(tmp_path / "b"), frames=frames).metrics

@@ -72,6 +72,13 @@ class RiskCfg(BaseModel):
     min_order_notional_tmn: float = 300_000
     fee_pct: float = 0.30
     maker_fee_pct: float = 0.20
+    fee_overrides: Dict[str, Dict[str, float]] = Field(default_factory=dict)   # {SYMBOL: {maker: x, taker: y}} in %
+
+    def fee_for(self, symbol: str, style: str) -> float:
+        ov = self.fee_overrides.get(symbol)
+        if ov and style in ov:
+            return float(ov[style])
+        return self.maker_fee_pct if style == "maker" else self.fee_pct
     slippage_pct: float = 0.05
 
 

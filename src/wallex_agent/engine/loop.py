@@ -44,9 +44,9 @@ def build_agent(s, mode: str, ai_mode: str = "live", mcp: bool = False):
         except WallexError as e:
             log.error("cannot read live account: %s", e); raise
         broker = LiveBroker(client, fee, s.execution.order_type, s.execution.limit_offset_pct, s.execution.order_timeout_seconds,
-                            style=s.execution.order_style)
+                            style=s.execution.order_style, fee_fn=lambda sym: s.risk.fee_for(sym, s.execution.order_style))
     else:
-        broker = SimulatedBroker(fee, s.risk.slippage_pct)
+        broker = SimulatedBroker(fee, s.risk.slippage_pct, lambda sym: s.risk.fee_for(sym, s.execution.order_style))
     analyst = None
     if s.strategy.ai_enabled and ai_mode != "off":
         try:

@@ -54,28 +54,30 @@ class Broker:
 
 
 class SimulatedBroker(Broker):
-    """Shared by shadow & backtest: instant fills with slippage."""
+    """Shared by shadow & backtest: instant fills with slippage. `fee_fn(symbol)` gives the %-fee per side."""
     name = "shadow"
 
-    def __init__(self, fee_pct: float, slippage_pct: float):
+    def __init__(self, fee_pct: float, slippage_pct: float, fee_fn=None):
         super().__init__(fee_pct)
         self.slip = slippage_pct
+        self.fee_fn = fee_fn or (lambda sym: fee_pct)
 
     def buy(self, symbol, notional_tmn, market, ref_price):
         px = ref_price * (1 + self.slip / 100)
         qty = round_down(notional_tmn / px, market.qty_precision)
         if qty <= 0 or qty < market.min_qty:
             return Fill(False, "", symbol, "BUY", 0, px, 0, 0, "REJECTED", error="qty below minimum")
+        fee = self.fee_fn(symbol)
         notional = qty * px
-        fee_tmn = notional * self.fee_pct / 100
-        net_qty = qty * (1 - self.fee_pct / 100)          # Wallex charges buy fees in the base coin
+        fee_tmn = notional * fee / 100
+        net_qty = qty * (1 - fee / 100)          # Wallex charges buy fees in the base coin
         return Fill(True, f"sim-{uuid.uuid4().hex[:10]}", symbol, "BUY", net_qty, px, notional, fee_tmn, "FILLED")
 
     def sell(self, symbol, qty, market, ref_price):
         px = ref_price * (1 - self.slip / 100)
         qty = round_down(qty, market.qty_precision)
         notional = qty * px
-        return Fill(True, f"sim-{uuid.uuid4().hex[:10]}", symbol, "SELL", qty, px, notional, notional * self.fee_pct / 100, "FILLED")
+        return Fill(True, f"sim-{uuid.uuid4().hex[:10]}", symbol, "SELL", qty, px, notional, notional * self.fee_fn(symbol) / 100, "FILLED")
 
     def cancel_all(self, symbol=None):
         return None
@@ -85,8 +87,9 @@ class LiveBroker(Broker):
     name = "live"
 
     def __init__(self, client: WallexClient, fee_pct: float, order_type: str = "LIMIT", limit_offset_pct: float = 0.1,
-                 timeout_s: int = 45, poll_s: float = 2.0, style: str = "maker"):
+                 timeout_s: int = 45, poll_s: float = 2.0, style: str = "maker", fee_fn=None):
         super().__init__(fee_pct)
+        self.fee_fn = fee_fn or (lambda sym: fee_pct)
         self.c = client
         self.order_type = order_type
         self.style = style            # maker: rest at our side of the book; taker: cross the spread by `offset`
@@ -162,7 +165,7 @@ class LiveBroker(Broker):
         # is executedQty minus the base fee, so the position size reflects what can later be sold.
         fee_tmn = p.get("fee_quote", 0.0) + p.get("fee_base", 0.0) * avg
         if fee_tmn <= 0 and ok:
-            fee_tmn = notional * self.fee_pct / 100
+            fee_tmn = notional * self.fee_fn(symbol) / 100
         net_qty = eq - p.get("fee_base", 0.0) if side == "BUY" else eq
         return Fill(ok, oid, symbol, side, net_qty, avg, notional, fee_tmn,
                     p.get("status", ""), raw=raw if isinstance(raw, dict) else None,

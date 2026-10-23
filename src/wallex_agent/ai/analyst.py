@@ -27,7 +27,9 @@ SYSTEM = (
     "Be conservative: capital preservation beats activity, but do not reject a thesis that the numbers support. "
     "Judge the candidate against ITS OWN strategy brief (given in the request), not against a generic dip-buying "
     "template. Wallex reports zero volume for some overnight hours on USDTTMN; treat that as low activity, not as "
-    "stale or broken data. You never see news; reason only from the numbers given. Answer with ONE JSON object only."
+    "stale or broken data. The `time` field in the data IS the present moment for your decision (this may be a historical "
+    "replay); never compare it with your own notion of today's date and never call the data stale because of it. "
+    "You never see news; reason only from the numbers given. Answer with ONE JSON object only."
 )
 
 # What each strategy module is trying to do: the analyst judges the candidate against this thesis.
