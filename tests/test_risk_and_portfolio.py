@@ -32,15 +32,16 @@ def test_exposure_cap_and_max_positions(settings):
     pf = Portfolio(cash_tmn=5_000_000, initial_capital=5_000_000)
     r = _risk(settings)
     now = time.time()
-    pf.positions["BTCTMN"] = Position("BTCTMN", 1, 1_000_000, now, 990_000, 1_016_000, 0.8, 1_000_000)
-    pf.positions["ETHTMN"] = Position("ETHTMN", 1, 1_000_000, now, 990_000, 1_016_000, 0.8, 1_000_000)
-    pf.cash_tmn = 3_000_000
-    pf.cash_tmn = 3_000_000
-    prices = {"BTCTMN": 1_000_000, "ETHTMN": 1_000_000}
+    syms = [f"S{i}TMN" for i in range(settings.risk.max_open_positions)]
+    for sym in syms:
+        pf.positions[sym] = Position(sym, 1, 1_000_000, now, 990_000, 1_016_000, 0.8, 1_000_000)
+    pf.cash_tmn = 5_000_000 - 1_000_000 * len(syms)
+    prices = {sym: 1_000_000 for sym in syms}
     eq = pf.mark(prices)
     ok, blocks = r.global_checks(pf, eq)
     assert not ok and any("max open positions" in b for b in blocks)
-    del pf.positions["ETHTMN"]
+    for sym in syms[1:]:
+        del pf.positions[sym]
     pf.cash_tmn = 4_000_000
     plan, notes = r.plan_entry("SOLTMN", pf, 5_000_000, prices, 1.0, None, None, 0.5)
     assert plan.notional_tmn <= 5_000_000 * settings.risk.max_total_exposure_pct - 1_000_000
