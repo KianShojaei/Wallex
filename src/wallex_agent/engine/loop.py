@@ -41,12 +41,13 @@ def build_agent(s, mode: str, ai_mode: str = "live", mcp: bool = False):
                 key = "maker" if s.execution.order_style == "maker" else "taker"
                 fee = max(v[key] for v in tmn.values()) or fee
             log.info("live account: %s=%.0f, taker fee=%.3f%%", s.challenge.quote_asset, pf.cash_tmn, fee)
-            reconcile_positions(s, client, pf, bal)
+            reconcile_notes = reconcile_positions(s, client, pf, bal)
         except WallexError as e:
             log.error("cannot read live account: %s", e); raise
         broker = LiveBroker(client, fee, s.execution.order_type, s.execution.limit_offset_pct, s.execution.order_timeout_seconds,
                             style=s.execution.order_style, fee_fn=lambda sym: s.risk.fee_for(sym, s.execution.order_style))
     else:
+        reconcile_notes = []
         broker = SimulatedBroker(fee, s.risk.slippage_pct, lambda sym: s.risk.fee_for(sym, s.execution.order_style))
     analyst = None
     if s.strategy.ai_enabled and ai_mode != "off":
@@ -58,12 +59,14 @@ def build_agent(s, mode: str, ai_mode: str = "live", mcp: bool = False):
     risk = RiskManager(s.risk, s.challenge_end_utc, s.challenge.liquidate_before_end_minutes)
     dlog = DecisionLog(s.execution.decision_log_dir, mode=mode)
     agent = Agent(s, pf, risk, analyst, broker, dlog)
+    for note in reconcile_notes:
+        dlog.write("reconcile", **note)
     md = MarketData(client, CandleStore(s.data.candle_cache_dir), s.data.resolution, s.data.fallback_resolution, s.data.lookback_bars)
     mcp_bridge = WallexMCP(api_key=s.wallex_api_key) if mcp else None
     return client, agent, md, state_path, mcp_bridge
 
 
-def reconcile_positions(s, client: WallexClient, pf: Portfolio, balances: Dict) -> None:
+def reconcile_positions(s, client: WallexClient, pf: Portfolio, balances: Dict) -> List[Dict]:
     """Make the portfolio match the EXCHANGE, which is the source of truth.
 
     If the state file was lost (redeploy without a persistent disk) or an order was filled outside a loop,
@@ -74,10 +77,11 @@ def reconcile_positions(s, client: WallexClient, pf: Portfolio, balances: Dict) 
     """
     from wallex_agent.portfolio.state import Position
     quote = s.challenge.quote_asset
+    notes: List[Dict] = []
     try:
         markets = client.markets()
     except WallexError as e:
-        log.warning("reconcile: cannot load markets (%s)", e); return
+        log.warning("reconcile: cannot load markets (%s)", e); return notes
     carry_cfg = (s.strategy.modules or {}).get("carry") or {}
     carry_sym = carry_cfg.get("symbol", "")
     now = time.time()
@@ -126,10 +130,14 @@ def reconcile_positions(s, client: WallexClient, pf: Portfolio, balances: Dict) 
                                      entry_order_id="reconciled", decision_id="reconciled", module="carry" if is_carry else "",
                                      last_add_time=now)
         log.warning("reconcile: rebuilt position %s qty=%.8f entry=%.0f value=%.0f TMN (state was missing it)", sym, qty, entry, value)
+        notes.append({"symbol": sym, "qty": qty, "entry_price": round(entry), "value_tmn": round(value),
+                      "reason": "position rebuilt from exchange balance and our recent BUY fills (state file was missing it)"})
     for sym in list(pf.positions):
         if sym not in seen:
             log.warning("reconcile: %s recorded but no coins on the exchange -> dropping record", sym)
+            notes.append({"symbol": sym, "reason": "recorded position dropped: no coins on the exchange"})
             del pf.positions[sym]
+    return notes
 
 
 def write_status(s, mode, agent, prices, markets, snaps, summ, res, t0, state_dir: Path) -> None:

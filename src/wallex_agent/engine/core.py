@@ -38,6 +38,7 @@ class Agent:
         self.regimes: Dict[str, Regime] = {}
         self.regime_ts: Dict[str, float] = {}
         self.retry_after: Dict[str, float] = {}      # symbol -> unix ts before which we do not re-consult the AI
+        self.last_hold_log: float = 0.0
         self.modules = build_modules(settings.strategy.modules)
 
     # ----------------------------------------------------------------- helpers
@@ -90,6 +91,20 @@ class Agent:
         for ex in self.risk.check_exits(self.pf, prices, hints, now):
             self._close(ex.symbol, ex.reason, prices, markets, now)
             summary["exits"].append(ex.symbol)
+
+        # periodic "why am I holding" record so the log never goes silent while a position is open
+        if self.pf.positions and now - self.last_hold_log >= self.s.strategy.hold_log_minutes * 60:
+            self.last_hold_log = now
+            for sym, p in self.pf.positions.items():
+                px = prices.get(sym, p.entry_price)
+                st = {k: v for k, v in ((snapshots.get(sym).to_dict() if snapshots.get(sym) else {}) or {}).items() if k in ("rsi", "atr_pct", "bb_pos")}
+                regime = self.regimes.get(f"{p.module}:{sym}")
+                self.log.write("hold", now=now, symbol=sym, module=p.module, qty=p.qty, entry_price=p.entry_price, price=px,
+                               upnl_pct=round(p.unrealized_pct(px), 3), value_tmn=round(p.qty * px), exposure_pct=round(p.qty * px / equity * 100, 1),
+                               stop_loss=p.stop_loss, distance_to_stop_pct=round((px / p.stop_loss - 1) * 100, 2),
+                               held_minutes=round((now - p.entry_time) / 60), regime=regime.model_dump() if regime else None,
+                               exit_hint=hints.get(sym), indicators=st,
+                               reason="holding: no exit rule triggered (stop/regime-off/crash guard); position above or at rule floor")
 
         # 3) entries ---------------------------------------------------------
         ok, blocks = self.risk.global_checks(self.pf, equity, now)

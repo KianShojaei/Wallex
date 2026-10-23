@@ -38,6 +38,7 @@ strategy:
   ai_min_confidence: 0.60
   regime_refresh_minutes: 60
   regime_refresh_minutes_when_blocked: 15   # re-ask the AI sooner while it is saying "no"
+  hold_log_minutes: 15                      # write a "hold" record (why we keep the position) this often
   modules:
     # CORE - Toman-weakening regime -> hold USDT (see docs/research.md for the evidence)
     carry:
