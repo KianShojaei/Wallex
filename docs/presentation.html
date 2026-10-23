@@ -94,113 +94,153 @@
 <!-- ================= SLIDE 2 : graphical abstract ================= -->
 <section class="slide" id="s2">
   <header>
-    <div><div class="kicker">اسلاید ۲ از ۲ · خلاصه‌ی گرافیکی معماری</div><h1>راهکار ما: <span>هسته‌ی رژیم ارزی، سبد دینامیک، AI با نقش واقعی</span></h1></div>
+    <div><div class="kicker">اسلاید ۲ از ۲ · خلاصه‌ی گرافیکی معماری و استک فنی</div><h1>راهکار ما: <span>هسته‌ی رژیم ارزی، سبد دینامیک، AI با نقش واقعی</span></h1></div>
     <div class="logo">W</div>
   </header>
 
-  <div class="grid" style="grid-template-columns:1.35fr .65fr;gap:16px;flex:1;min-height:0">
-    <div class="card" style="padding:12px 14px;display:flex;flex-direction:column">
-      <svg viewBox="0 0 900 600" width="100%" style="flex:1;display:block;direction:ltr" xmlns="http://www.w3.org/2000/svg">
+  <div class="grid" style="grid-template-columns:1.45fr .55fr;gap:14px;flex:1;min-height:0">
+    <div class="card" style="padding:10px 12px;display:flex;flex-direction:column">
+      <svg viewBox="0 0 960 690" width="100%" style="flex:1;display:block;direction:ltr" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#9aa6b2"/></marker>
-          <marker id="arr2" markerWidth="8" markerHeight="8" refX="2" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="#9aa6b2"/></marker>
           <style>
             .box{stroke-width:1.2} .out{fill:#2a2f36;stroke:#4a525c} .ours{fill:#0f3d33;stroke:#1fa37c} .gate{fill:#4a2314;stroke:#c2410c}
-            .t1{font-size:14px;font-weight:800;fill:#eef2f6} .t2{font-size:11px;fill:#aab5c0} .tg1{font-size:15px;font-weight:800;fill:#fde7d9} .tg2{font-size:11.5px;fill:#f6c9b0}
-            .lbl{font-size:12px;fill:#9aa6b2} .ln{stroke:#9aa6b2;stroke-width:1.4;fill:none}
+            .t1{font-size:13.5px;font-weight:800;fill:#eef2f6} .t2{font-size:10.5px;fill:#aab5c0} .tg1{font-size:14.5px;font-weight:800;fill:#fde7d9} .tg2{font-size:11px;fill:#f6c9b0}
+            .lbl{font-size:11.5px;fill:#9aa6b2} .ln{stroke:#9aa6b2;stroke-width:1.4;fill:none}
+            .chip{fill:#0b1a17;stroke:#1fa37c;stroke-opacity:.55} .chipo{fill:#1b1f25;stroke:#5b6572} .chipg{fill:#2a1109;stroke:#c2410c;stroke-opacity:.7}
+            .ct{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:8.6px;fill:#cfe9df} .cto{fill:#c9d2db} .ctg{fill:#fbd5c0}
           </style>
         </defs>
 
         <!-- ROW 1: outside systems -->
         <g>
-          <rect class="box out" x="20" y="18" width="190" height="60" rx="10"/>
-          <text class="t1" x="115" y="43" text-anchor="middle">Wallex Market Data</text><text class="t2" x="115" y="62" text-anchor="middle">کندل ۱h، اردربوک، موجودی (REST / MCP)</text>
-          <rect class="box out" x="230" y="18" width="190" height="60" rx="10"/>
-          <text class="t1" x="325" y="43" text-anchor="middle">USDT/TMN</text><text class="t2" x="325" y="62" text-anchor="middle">فقط خواندن · سنسور رژیم تومان</text>
-          <rect class="box out" x="470" y="18" width="190" height="60" rx="10"/>
-          <text class="t1" x="565" y="43" text-anchor="middle">LLM Gateway</text><text class="t2" x="565" y="62" text-anchor="middle">BoxAPI · gpt-6-sol / gpt-6-luna</text>
-          <rect class="box out" x="690" y="18" width="190" height="60" rx="10"/>
-          <text class="t1" x="785" y="43" text-anchor="middle">Judges / Claude</text><text class="t2" x="785" y="62" text-anchor="middle">داشبورد، MCP، بازپخش</text>
+          <rect class="box out" x="20" y="14" width="205" height="66" rx="10"/>
+          <text class="t1" x="122" y="36" text-anchor="middle">Wallex Market Data</text><text class="t2" x="122" y="52" text-anchor="middle">کندل ۱h · اردربوک · موجودی</text>
+          <rect class="chipo" x="52" y="59" width="140" height="15" rx="7"/><text class="ct cto" x="122" y="70" text-anchor="middle">REST /v1 · UDF · MCP (HTTP)</text>
+
+          <rect class="box out" x="245" y="14" width="205" height="66" rx="10"/>
+          <text class="t1" x="347" y="36" text-anchor="middle">USDT/TMN</text><text class="t2" x="347" y="52" text-anchor="middle">فقط خواندن · سنسور رژیم تومان</text>
+          <rect class="chipo" x="292" y="59" width="110" height="15" rx="7"/><text class="ct cto" x="347" y="70" text-anchor="middle">hourly OHLCV</text>
+
+          <rect class="box out" x="490" y="14" width="205" height="66" rx="10"/>
+          <text class="t1" x="592" y="36" text-anchor="middle">LLM Gateway</text><text class="t2" x="592" y="52" text-anchor="middle">BoxAPI · gpt-6-sol / gpt-6-luna</text>
+          <rect class="chipo" x="522" y="59" width="140" height="15" rx="7"/><text class="ct cto" x="592" y="70" text-anchor="middle">OpenAI-compatible API</text>
+
+          <rect class="box out" x="735" y="14" width="205" height="66" rx="10"/>
+          <text class="t1" x="837" y="36" text-anchor="middle">Judges / Claude</text><text class="t2" x="837" y="52" text-anchor="middle">بازرسی، بازپخش، اجرای مجدد</text>
+          <rect class="chipo" x="767" y="59" width="140" height="15" rx="7"/><text class="ct cto" x="837" y="70" text-anchor="middle">Browser · MCP client · CLI</text>
         </g>
 
-        <!-- ROW 2: our decision layer -->
+        <!-- ROW 2: decision layer -->
         <g>
-          <rect class="box ours" x="20" y="122" width="300" height="70" rx="10"/>
-          <text class="t1" x="170" y="147" text-anchor="middle">Regime Engine · قواعد قطعی</text>
-          <text class="t2" x="170" y="166" text-anchor="middle">EMA ۷۲h و مومنتوم ۲۴h روی USDT/TMN → روشن/خاموش</text>
-          <text class="t2" x="170" y="182" text-anchor="middle">score ۰..۱ → کف اکسپوژر ۸۰٪ تا ۹۵٪</text>
+          <rect class="box ours" x="20" y="120" width="320" height="86" rx="10"/>
+          <text class="t1" x="180" y="141" text-anchor="middle">Regime Engine · قواعد قطعی</text>
+          <text class="t2" x="180" y="157" text-anchor="middle">EMA۷۲h + مومنتوم ۲۴h با هیسترزیس → score ۰..۱ → کف ۸۰–۹۵٪</text>
+          <rect class="chip" x="32" y="166" width="150" height="15" rx="7"/><text class="ct" x="107" y="177" text-anchor="middle">Python 3.12 · pandas · numpy</text>
+          <rect class="chip" x="188" y="166" width="140" height="15" rx="7"/><text class="ct" x="258" y="177" text-anchor="middle">EMA · RSI · ATR · Bollinger</text>
+          <rect class="chip" x="32" y="185" width="296" height="15" rx="7"/><text class="ct" x="180" y="196" text-anchor="middle">walk-forward validated · 30d 1-min data · 4k param sets</text>
 
-          <rect class="box ours" x="350" y="122" width="300" height="70" rx="10"/>
-          <text class="t1" x="500" y="147" text-anchor="middle">Basket Allocator · سبد حامل‌های دلاری</text>
-          <text class="t2" x="500" y="166" text-anchor="middle">XAUT ۵۰ · BTC ۳۰ · ETH ۲۰ · وزن دینامیک با قدرت دلاری ۷۲h</text>
-          <text class="t2" x="500" y="182" text-anchor="middle">گارد روند هر حامل · سقف و کف هر پا</text>
+          <rect class="box ours" x="360" y="120" width="320" height="86" rx="10"/>
+          <text class="t1" x="520" y="141" text-anchor="middle">Basket Allocator · سبد حامل‌های دلاری</text>
+          <text class="t2" x="520" y="157" text-anchor="middle">XAUT ۵۰ · BTC ۳۰ · ETH ۲۰ · وزن دینامیک با قدرت دلاری ۷۲h · گارد روند</text>
+          <rect class="chip" x="372" y="166" width="150" height="15" rx="7"/><text class="ct" x="447" y="177" text-anchor="middle">strategy plugin registry</text>
+          <rect class="chip" x="528" y="166" width="140" height="15" rx="7"/><text class="ct" x="598" y="177" text-anchor="middle">relative-strength tilt</text>
+          <rect class="chip" x="372" y="185" width="296" height="15" rx="7"/><text class="ct" x="520" y="196" text-anchor="middle">YAML-driven config · add a coin = 2 lines</text>
 
-          <rect class="box ours" x="680" y="122" width="200" height="70" rx="10"/>
-          <text class="t1" x="780" y="147" text-anchor="middle">AI Analyst</text>
-          <text class="t2" x="780" y="166" text-anchor="middle">رژیم سالم؟ اندازه بین کف و سقف</text>
-          <text class="t2" x="780" y="182" text-anchor="middle">JSON سخت + دلیل · کش و replay</text>
+          <rect class="box ours" x="700" y="120" width="240" height="86" rx="10"/>
+          <text class="t1" x="820" y="141" text-anchor="middle">AI Analyst (LLM)</text>
+          <text class="t2" x="820" y="157" text-anchor="middle">رژیم سالم؟ اندازه‌ی هر پا بین کف و سقف</text>
+          <rect class="chip" x="712" y="166" width="105" height="15" rx="7"/><text class="ct" x="764" y="177" text-anchor="middle">openai SDK</text>
+          <rect class="chip" x="823" y="166" width="105" height="15" rx="7"/><text class="ct" x="875" y="177" text-anchor="middle">pydantic schema</text>
+          <rect class="chip" x="712" y="185" width="216" height="15" rx="7"/><text class="ct" x="820" y="196" text-anchor="middle">strict JSON · cache · replay · module brief</text>
         </g>
 
         <!-- ROW 3: safety gate -->
         <g>
-          <rect class="box gate" x="20" y="232" width="860" height="66" rx="10"/>
-          <text class="tg1" x="450" y="258" text-anchor="middle">Risk &amp; Compliance Engine · هر سفارش از این‌جا می‌گذرد</text>
-          <text class="tg2" x="450" y="280" text-anchor="middle">سقف ۹۵٪ · حد ضرر ۲.۵٪ هر پا · توقف روزانه ۲٪ · Kill switch ۴٪ · AI فقط می‌تواند ریسک را کم کند · ۳۴۵ بازار ممنوع · تسویه به تومان قبل از پایان</text>
+          <rect class="box gate" x="20" y="244" width="920" height="82" rx="10"/>
+          <text class="tg1" x="480" y="266" text-anchor="middle">Risk &amp; Compliance Engine · هر سفارش از این دروازه می‌گذرد</text>
+          <text class="tg2" x="480" y="285" text-anchor="middle">سقف ۹۵٪ · سقف هر پا · حد ضرر ۲.۵٪ · توقف روزانه ۲٪ · Kill switch ۴٪ · AI فقط می‌تواند ریسک را کم کند · ۳۴۵ بازار ممنوع · تسویه به تومان قبل از پایان</text>
+          <rect class="chipg" x="130" y="298" width="150" height="15" rx="7"/><text class="ct ctg" x="205" y="309" text-anchor="middle">vol-scaled sizing (1/ATR%)</text>
+          <rect class="chipg" x="290" y="298" width="150" height="15" rx="7"/><text class="ct ctg" x="365" y="309" text-anchor="middle">rule floor ≥ AI, AI ≤ cap</text>
+          <rect class="chipg" x="450" y="298" width="150" height="15" rx="7"/><text class="ct ctg" x="525" y="309" text-anchor="middle">drawdown halts · cooldowns</text>
+          <rect class="chipg" x="610" y="298" width="150" height="15" rx="7"/><text class="ct ctg" x="685" y="309" text-anchor="middle">blocked-market whitelist</text>
+          <rect class="chipg" x="770" y="298" width="140" height="15" rx="7"/><text class="ct ctg" x="840" y="309" text-anchor="middle">end-of-challenge flatten</text>
         </g>
 
-        <!-- ROW 4: tool layer (dashed container) -->
+        <!-- ROW 4: execution & observability -->
         <g>
-          <rect x="20" y="326" width="860" height="166" rx="12" fill="none" stroke="#4a525c" stroke-dasharray="6 5"/>
-          <text class="lbl" x="32" y="346">Execution &amp; observability layer · همان هسته برای backtest / shadow / live · به‌صورت سرور MCP هم عرضه می‌شود</text>
-          <rect class="box ours" x="40" y="358" width="255" height="54" rx="9"/><text class="t1" x="167" y="380" text-anchor="middle">Broker</text><text class="t2" x="167" y="398" text-anchor="middle">Maker → Taker · سقف به موجودی آزاد</text>
-          <rect class="box ours" x="322" y="358" width="255" height="54" rx="9"/><text class="t1" x="449" y="380" text-anchor="middle">Reconciler</text><text class="t2" x="449" y="398" text-anchor="middle">بازسازی پوزیشن‌ها از موجودی واقعی صرافی</text>
-          <rect class="box ours" x="604" y="358" width="255" height="54" rx="9"/><text class="t1" x="731" y="380" text-anchor="middle">Decision Log</text><text class="t2" x="731" y="398" text-anchor="middle">JSONL · هر دقیقه · هر «چرا» و «چرا نه»</text>
-          <rect class="box ours" x="40" y="424" width="255" height="54" rx="9"/><text class="t1" x="167" y="446" text-anchor="middle">Dashboard</text><text class="t2" x="167" y="464" text-anchor="middle">RTL، لحظه‌ای، نمودار تعاملی</text>
-          <rect class="box ours" x="322" y="424" width="255" height="54" rx="9"/><text class="t1" x="449" y="446" text-anchor="middle">MCP Server</text><text class="t2" x="449" y="464" text-anchor="middle">۹ ابزار فقط‌خواندنی برای Claude و داوران</text>
-          <rect class="box ours" x="604" y="424" width="255" height="54" rx="9"/><text class="t1" x="731" y="446" text-anchor="middle">Backtester</text><text class="t2" x="731" y="464" text-anchor="middle">walk-forward · AI off/replay/live</text>
+          <rect x="20" y="352" width="920" height="186" rx="12" fill="none" stroke="#4a525c" stroke-dasharray="6 5"/>
+          <text class="lbl" x="32" y="371">Execution &amp; observability · همان هسته‌ی تصمیم (Agent.step) برای backtest / shadow / live · به‌صورت سرور MCP هم عرضه می‌شود</text>
+
+          <rect class="box ours" x="40" y="382" width="285" height="66" rx="9"/><text class="t1" x="182" y="402" text-anchor="middle">Broker</text><text class="t2" x="182" y="417" text-anchor="middle">Maker → Taker · سقف به موجودی آزاد · کارمزد درون‌کوینی</text>
+          <rect class="chip" x="52" y="426" width="130" height="15" rx="7"/><text class="ct" x="117" y="437" text-anchor="middle">httpx · retry/backoff</text>
+          <rect class="chip" x="188" y="426" width="125" height="15" rx="7"/><text class="ct" x="250" y="437" text-anchor="middle">idempotent client_id</text>
+
+          <rect class="box ours" x="337" y="382" width="285" height="66" rx="9"/><text class="t1" x="479" y="402" text-anchor="middle">Reconciler</text><text class="t2" x="479" y="417" text-anchor="middle">بازسازی پوزیشن‌ها از موجودی واقعی صرافی در هر شروع</text>
+          <rect class="chip" x="349" y="426" width="130" height="15" rx="7"/><text class="ct" x="414" y="437" text-anchor="middle">exchange = truth</text>
+          <rect class="chip" x="485" y="426" width="125" height="15" rx="7"/><text class="ct" x="547" y="437" text-anchor="middle">avg cost from fills</text>
+
+          <rect class="box ours" x="634" y="382" width="306" height="66" rx="9"/><text class="t1" x="787" y="402" text-anchor="middle">Decision Log</text><text class="t2" x="787" y="417" text-anchor="middle">هر دقیقه · هر «چرا» و «چرا نه» · رژیم، سبد، AI، ریسک</text>
+          <rect class="chip" x="646" y="426" width="130" height="15" rx="7"/><text class="ct" x="711" y="437" text-anchor="middle">append-only JSONL</text>
+          <rect class="chip" x="782" y="426" width="146" height="15" rx="7"/><text class="ct" x="855" y="437" text-anchor="middle">commit hash in run_start</text>
+
+          <rect class="box ours" x="40" y="458" width="285" height="66" rx="9"/><text class="t1" x="182" y="478" text-anchor="middle">Dashboard</text><text class="t2" x="182" y="493" text-anchor="middle">RTL · لحظه‌ای · نمودار تعاملی · فیلتر لاگ</text>
+          <rect class="chip" x="52" y="502" width="130" height="15" rx="7"/><text class="ct" x="117" y="513" text-anchor="middle">HTML · vanilla JS · SVG</text>
+          <rect class="chip" x="188" y="502" width="125" height="15" rx="7"/><text class="ct" x="250" y="513" text-anchor="middle">stdlib http.server</text>
+
+          <rect class="box ours" x="337" y="458" width="285" height="66" rx="9"/><text class="t1" x="479" y="478" text-anchor="middle">MCP Server</text><text class="t2" x="479" y="493" text-anchor="middle">۹ ابزار فقط‌خواندنی برای Claude و داوران</text>
+          <rect class="chip" x="349" y="502" width="130" height="15" rx="7"/><text class="ct" x="414" y="513" text-anchor="middle">JSON-RPC 2.0</text>
+          <rect class="chip" x="485" y="502" width="125" height="15" rx="7"/><text class="ct" x="547" y="513" text-anchor="middle">Streamable HTTP</text>
+
+          <rect class="box ours" x="634" y="458" width="306" height="66" rx="9"/><text class="t1" x="787" y="478" text-anchor="middle">Backtester &amp; Tests</text><text class="t2" x="787" y="493" text-anchor="middle">رویدادمحور · walk-forward · AI off / replay / live</text>
+          <rect class="chip" x="646" y="502" width="130" height="15" rx="7"/><text class="ct" x="711" y="513" text-anchor="middle">same core · fee/slippage</text>
+          <rect class="chip" x="782" y="502" width="146" height="15" rx="7"/><text class="ct" x="855" y="513" text-anchor="middle">pytest · 20 tests</text>
         </g>
 
         <!-- ROW 5: outside systems -->
         <g>
-          <rect class="box out" x="20" y="522" width="270" height="56" rx="10"/><text class="t1" x="155" y="545" text-anchor="middle">Wallex Spot Account</text><text class="t2" x="155" y="563" text-anchor="middle">حساب اختصاصی چالش · سفارش‌های واقعی</text>
-          <rect class="box out" x="315" y="522" width="270" height="56" rx="10"/><text class="t1" x="450" y="545" text-anchor="middle">Persistent Disk (Liara)</text><text class="t2" x="450" y="563" text-anchor="middle">state · لاگ تصمیم · کش AI · کندل‌ها</text>
-          <rect class="box out" x="610" y="522" width="270" height="56" rx="10"/><text class="t1" x="745" y="545" text-anchor="middle">GitHub Repo</text><text class="t2" x="745" y="563" text-anchor="middle">همان کد معامله‌کننده · هش کامیت در لاگ</text>
+          <rect class="box out" x="20" y="568" width="290" height="62" rx="10"/><text class="t1" x="165" y="589" text-anchor="middle">Wallex Spot Account</text><text class="t2" x="165" y="604" text-anchor="middle">حساب اختصاصی چالش · سفارش‌های واقعی</text>
+          <rect class="chipo" x="95" y="611" width="140" height="15" rx="7"/><text class="ct cto" x="165" y="622" text-anchor="middle">X-API-Key · no-withdraw key</text>
+          <rect class="box out" x="335" y="568" width="290" height="62" rx="10"/><text class="t1" x="480" y="589" text-anchor="middle">Runtime · Liara</text><text class="t2" x="480" y="604" text-anchor="middle">کانتینر ۲۴/۷ · دیسک دائمی برای state و لاگ‌ها</text>
+          <rect class="chipo" x="390" y="611" width="180" height="15" rx="7"/><text class="ct cto" x="480" y="622" text-anchor="middle">Docker · healthcheck · 12-factor</text>
+          <rect class="box out" x="650" y="568" width="290" height="62" rx="10"/><text class="t1" x="795" y="589" text-anchor="middle">GitHub Repo</text><text class="t2" x="795" y="604" text-anchor="middle">همان کد معامله‌کننده · README · research · این ارائه</text>
+          <rect class="chipo" x="725" y="611" width="140" height="15" rx="7"/><text class="ct cto" x="795" y="622" text-anchor="middle">git · MIT · reproducible</text>
+        </g>
+
+        <!-- STACK strip -->
+        <g>
+          <rect x="20" y="646" width="920" height="40" rx="9" fill="#121923" stroke="#223044"/>
+          <text class="lbl" x="30" y="663" font-weight="700" fill="#e9eef5">Stack</text>
+          <text class="ct" x="72" y="662" fill="#cfe9df" font-size="9px">Engine: Python 3.12 · pandas · numpy · pydantic · httpx · openai SDK · PyYAML · rich · pytest     UI: HTML/CSS · vanilla JS · SVG · Vazirmatn</text>
+          <text class="ct" x="72" y="677" fill="#cfe9df" font-size="9px">Ops: Docker · Liara (persistent disk) · YAML config · .env · healthcheck     Integrations: Wallex REST + MCP · BoxAPI LLM gateway · MCP server (JSON-RPC 2.0 / Streamable HTTP)</text>
         </g>
 
         <!-- arrows -->
-        <path class="ln" d="M115,78 L115,122" marker-end="url(#arr)"/>
-        <path class="ln" d="M325,78 L325,122" marker-end="url(#arr)"/>
-        <path class="ln" d="M565,78 L565,105 L780,105 L780,122" marker-end="url(#arr)"/>
-        <path class="ln" d="M785,78 L785,95 L895,95 L895,470 L859,470" marker-end="url(#arr)"/>
-        <path class="ln" d="M320,157 L350,157" marker-end="url(#arr)"/>
-        <path class="ln" d="M680,157 L650,157" marker-end="url(#arr)"/>
-        <path class="ln" d="M500,192 L500,232" marker-end="url(#arr)"/>
-        <path class="ln" d="M450,298 L450,326" marker-end="url(#arr)"/>
-        <path class="ln" d="M167,478 L167,522" marker-end="url(#arr)"/>
-        <path class="ln" d="M449,478 L449,522" marker-end="url(#arr)"/>
-        <path class="ln" d="M731,478 L731,522" marker-end="url(#arr)"/>
-        <!-- feedback: prices/balances back into regime engine -->
-        <path class="ln" d="M5,545 L5,157 L20,157" stroke-dasharray="4 4" marker-end="url(#arr)"/>
-        <text class="lbl" x="12" y="508" transform="rotate(-90 12,508)">قیمت و موجودی هر دقیقه</text>
+        <path class="ln" d="M122,80 L122,120" marker-end="url(#arr)"/>
+        <path class="ln" d="M347,80 L347,100 L250,100 L250,120" marker-end="url(#arr)"/>
+        <path class="ln" d="M592,80 L592,100 L820,100 L820,120" marker-end="url(#arr)"/>
+        <path class="ln" d="M837,80 L837,92 L952,92 L952,491 L940,491" marker-end="url(#arr)"/>
+        <path class="ln" d="M340,163 L360,163" marker-end="url(#arr)"/>
+        <path class="ln" d="M700,163 L680,163" marker-end="url(#arr)"/>
+        <path class="ln" d="M520,206 L520,244" marker-end="url(#arr)"/>
+        <path class="ln" d="M480,326 L480,352" marker-end="url(#arr)"/>
+        <path class="ln" d="M182,524 L182,568" marker-end="url(#arr)"/>
+        <path class="ln" d="M479,524 L479,568" marker-end="url(#arr)"/>
+        <path class="ln" d="M787,524 L787,568" marker-end="url(#arr)"/>
+        <path class="ln" d="M8,599 L8,163 L20,163" stroke-dasharray="4 4" marker-end="url(#arr)"/>
       </svg>
-      <div class="legend" style="margin-top:8px"><span><i style="background:#2a2f36;border:1px solid #4a525c"></i>سیستم‌های بیرونی</span><span><i style="background:#0f3d33;border:1px solid #1fa37c"></i>کد ما</span><span><i style="background:#4a2314;border:1px solid #c2410c"></i>دروازه‌ی ایمنی: هر سفارش از آن می‌گذرد</span><span><i style="border:1px dashed #4a525c"></i>یک هسته برای بک‌تست / شدو / زنده</span></div>
+      <div class="legend" style="margin-top:6px"><span><i style="background:#2a2f36;border:1px solid #4a525c"></i>سیستم‌های بیرونی</span><span><i style="background:#0f3d33;border:1px solid #1fa37c"></i>کد ما (Python)</span><span><i style="background:#4a2314;border:1px solid #c2410c"></i>دروازه‌ی ایمنی: هر سفارش از آن می‌گذرد</span><span><i style="border:1px dashed #4a525c"></i>یک هسته برای بک‌تست / شدو / زنده</span><span><i style="background:#0b1a17;border:1px solid #1fa37c"></i>چیپ‌ها = فناوری / تکنیک هر جزء</span></div>
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:12px">
-      <div class="card"><h3><span class="ic b">🔬</span>بینش داده‌محور</h3>
-        <p>۳۰ روز، ۴۳ هزار کندل در هر بازار: همه‌ی ارزها به دلار منفی (BTC −۵٪ تا DOGE −۲۱٪)، دلار/تومان <b class="num">+18%</b>. با کارمزد <b class="num">0.6%</b>، <b>۰ از ۶۴۸</b> ترکیب بازگشت به میانگین و <b>۰ از ۷۶۸</b> ترکیب روندگرایی خارج از نمونه مثبت ماند.</p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="card" style="padding:14px 16px"><h3><span class="ic b">🧰</span>زبان‌ها و کتابخانه‌ها</h3>
+        <ul><li><b>Python 3.12</b>: کل موتور (داده، استراتژی، ریسک، اجرا، بک‌تست)</li><li><b>pandas / numpy</b>: اندیکاتورها و پژوهش</li><li><b>pydantic</b>: کانفیگ تایپ‌شده و اعتبارسنجی خروجی LLM</li><li><b>httpx</b>: کلاینت والکس با retry · <b>openai SDK</b>: گیت‌وی مدل</li><li><b>HTML/JS/SVG</b>: داشبورد بدون فریم‌ورک · <b>pytest</b>: ۲۰ تست</li></ul>
       </div>
-      <div class="card"><h3><span class="ic v">💡</span>تصمیم طراحی</h3>
-        <p>منبع پایدار سود را مستقیم بگیر: رژیم تومان را روی USDT/TMN بسنج (خرید تتر در حساب چالش بسته است) و آن را از طریق سبد حامل‌های دلاری اجرا کن. اکسپوژر پایه بالا و دینامیک؛ AI جایی تصمیم می‌گیرد که قواعد ساکت‌اند: سلامت روند و اندازه‌ی هر پا.</p>
+      <div class="card" style="padding:14px 16px"><h3><span class="ic v">🏗️</span>معماری</h3>
+        <ul><li>مونولیت ماژولار با <b>رجیستری استراتژی</b> (plugin)</li><li><b>یک هسته‌ی تصمیم</b> برای backtest / shadow / live</li><li>بروکر انتزاعی (Live / Simulated)، بک‌تست رویدادمحور</li><li>پیکربندی YAML + env (12-factor)، وضعیت روی دیسک، reconcile</li><li>سرور MCP بدون وابستگی (JSON-RPC 2.0 / Streamable HTTP)</li></ul>
       </div>
-      <div class="card"><h3><span class="ic g">✅</span>نگاشت به داوری</h3>
-        <ul>
-          <li><b>منطق قابل دفاع:</b> قواعد عددی، شواهد در <code>docs/research.md</code></li>
-          <li><b>AI واقعی:</b> تصمیم‌های مستقل با rationale، کش و replay</li>
-          <li><b>ریسک:</b> دروازه‌ی واحد؛ AI فقط ریسک را کم می‌کند</li>
-          <li><b>اجرای مجدد:</b> یک هسته، یک دستور</li>
-          <li><b>بک‌تست:</b> +۳.۸٪ / ۲۶ روز، افت ۲٪، walk-forward</li>
-        </ul>
+      <div class="card" style="padding:14px 16px"><h3><span class="ic g">🧪</span>تکنیک‌های تخصصی</h3>
+        <ul><li>رژیم با <b>هیسترزیس</b> روی EMA/مومنتوم؛ score → کف اکسپوژر</li><li><b>وزن دینامیک</b> با قدرت نسبی دلاری؛ گارد روند هر حامل</li><li><b>LLM با خروجی ساخت‌یافته</b>، بریف هر ماژول، کش و replay قطعی</li><li>سایز با نوسان (1/ATR%)، حد ضرر، DD halt، kill switch</li><li>اجرای Maker-first، کارمزد درون‌کوینی، بازتوازن بدون کارمزد</li><li>اعتبارسنجی <b>walk-forward</b> روی ۳۰ روز داده‌ی ۱ دقیقه‌ای</li></ul>
       </div>
     </div>
   </div>
