@@ -88,6 +88,8 @@ def test_carry_basket_and_rebalance(settings, tmp_path):
     from wallex_agent.strategy.base import Context
     from wallex_agent.data.features import compute_indicators, snapshot_from
     settings.strategy.modules["carry"]["dynamic_weights"] = False       # static weights for this test
+    settings.strategy.modules["carry"]["max_position_pct"] = 0.8        # fixed cap so the expected shares below hold
+    settings.strategy.modules["carry"].pop("rebalance_symbols", None)   # use the generic tolerance path here
     cs = CarryStrategy(settings.strategy.modules["carry"])
     assert abs(cs.position_cap_pct("XAUTTMN") - 0.40) < 1e-9 and abs(cs.position_cap_pct("BTCTMN") - 0.24) < 1e-9
     n = 300; idx = pd.date_range("2026-09-01", periods=n, freq="60min", tz="UTC")

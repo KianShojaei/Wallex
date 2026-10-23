@@ -106,7 +106,7 @@ class RiskManager:
                 return None, [f"top-up cooldown ({self.cfg.top_up_cooldown_minutes}m)"]
             target = target - held
             notes.append(f"top-up: target {max_pos * size_factor:,.0f} - held {held:,.0f} = {target:,.0f}")
-        notional = min(target, room, pf.cash_tmn * 0.98)
+        notional = min(target, room, pf.cash_tmn * 0.995)
         if notional < self.cfg.min_order_notional_tmn:
             return None, notes + [f"notional {notional:,.0f} < min {self.cfg.min_order_notional_tmn:,.0f} (room {room:,.0f}, cash {pf.cash_tmn:,.0f})"]
         sl = float(ov["stop_loss_pct"]) if ov.get("stop_loss_pct") is not None else self.cfg.stop_loss_pct

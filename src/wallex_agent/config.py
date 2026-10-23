@@ -72,6 +72,7 @@ class RiskCfg(BaseModel):
     cooldown_after_loss_minutes: int = 90
     top_up_cooldown_minutes: int = 360
     rebalance_tolerance_pct: float = 10.0     # trim a position only when it exceeds its cap by more than this (relative)
+    rebalance_cooldown_minutes: int = 30
     min_order_notional_tmn: float = 300_000
     fee_pct: float = 0.30
     maker_fee_pct: float = 0.20

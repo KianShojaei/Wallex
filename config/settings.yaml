@@ -61,10 +61,12 @@ strategy:
       momentum_on_pct: 0.3
       momentum_off_pct: -0.3
       min_score: 0.5
-      base_size_factor: 0.5             # rule floor at score 0.6: 50% of each carrier's cap (basket total 40% of equity)
-      floor_max_size_factor: 0.8        # rule floor at score 1.0: 80% of each carrier's cap (basket total 64% of equity)
+      base_size_factor: 0.6             # rule floor at score 0.6: 60% of each carrier's cap (basket total 60% of equity)
+      floor_max_size_factor: 1.0        # rule floor at score 1.0: full cap (basket total 100% of equity)
       floor_min_score: 0.6              # below this score there is no floor; the AI advises above the floor up to the cap
-      max_position_pct: 0.80            # whole basket may use up to 80% of equity (<= risk.max_total_exposure_pct)
+      max_position_pct: 1.00            # whole basket may use up to 100% of equity (team decision 2026-10-23: no TMN cash buffer)
+      rebalance_symbols: [XAUTTMN]      # only the 0%-maker-fee carrier is actively rebalanced to its target weight
+      rebalance_band_pct: 3             # ...whenever its weight drifts more than ±3% (relative) from target, at most every 30 min
       stop_loss_pct: 2.5                # tail protection only; regime exit is the normal way out
       take_profit_pct: 0                # 0 = no fixed take-profit
       trailing_pct: 0
@@ -106,9 +108,9 @@ strategy:
 
 risk:
   max_position_pct: 0.20                # default cap for modules that do not set their own
-  max_total_exposure_pct: 0.80          # dynamic cap: at most 80% of the account in the market, 20% always TMN
+  max_total_exposure_pct: 1.00          # team decision: the whole account may be in the market (no TMN buffer)
   max_open_positions: 3                 # the three basket carriers
-  rebalance_tolerance_pct: 10           # trim a position when it exceeds its basket cap by >10% (relative)
+  rebalance_tolerance_pct: 10           # trim ANY position when it exceeds its basket cap by >10% (relative); fee-free carriers use the tighter band above
   stop_loss_pct: 2.0                    # defaults, overridden per module above
   take_profit_pct: 0
   trailing_stop_pct: 0
@@ -116,7 +118,7 @@ risk:
   daily_drawdown_halt_pct: 2.0          # no new entries for the rest of the day
   total_drawdown_kill_pct: 4.0          # flatten everything and stop
   cooldown_after_loss_minutes: 360      # re-entry wait after a stop-out (per symbol)
-  top_up_cooldown_minutes: 60           # a module may add to an open position at most hourly (when the floor/AI allow a bigger size)
+  top_up_cooldown_minutes: 30           # a module may add to an open position at most every 30 min (when the floor/AI allow a bigger size)
   min_order_notional_tmn: 300000
   fee_pct: 0.30                         # Wallex TMN markets: taker 0.30%
   maker_fee_pct: 0.20                   #                     maker 0.20% (verified from a live fill; live mode reads /v1/account/fee)

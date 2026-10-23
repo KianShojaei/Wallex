@@ -39,6 +39,7 @@ class Agent:
         self.regime_ts: Dict[str, float] = {}
         self.retry_after: Dict[str, float] = {}      # symbol -> unix ts before which we do not re-consult the AI
         self.last_hold_log: float = 0.0
+        self.last_rebalance: Dict[str, float] = {}
         self.modules = build_modules(settings.strategy.modules)
 
     # ----------------------------------------------------------------- helpers
@@ -92,23 +93,30 @@ class Agent:
             self._close(ex.symbol, ex.reason, prices, markets, now)
             summary["exits"].append(ex.symbol)
 
-        # rebalance: a position above its module/basket cap (after a config change or a reconcile) is trimmed to the cap
-        tol = self.s.risk.rebalance_tolerance_pct / 100
+        # rebalance: a position above its module/basket cap (after a config change, a reconcile or price drift) is trimmed.
+        # Fee-free carriers (module cfg `rebalance_symbols`) use a tight band so the basket tracks its target weights with
+        # zero-fee maker orders; everything else only when >rebalance_tolerance_pct above cap (fees would eat small trims).
+        tol_default = self.s.risk.rebalance_tolerance_pct / 100
         for sym, p in list(self.pf.positions.items()):
-            cap = None
+            cap = None; mod = None
             for m in self.modules:
                 if not p.module or m.name == p.module:
                     cap = m.position_cap_pct(sym)
                     if cap is not None:
-                        break
+                        mod = m; break
             px = prices.get(sym)
             if cap is None or px is None:
+                continue
+            free_syms = set((mod.cfg.get("rebalance_symbols") or []) if mod else [])
+            tol = float(mod.cfg.get("rebalance_band_pct", 3)) / 100 if sym in free_syms else tol_default
+            if now - self.last_rebalance.get(sym, 0) < self.s.risk.rebalance_cooldown_minutes * 60:
                 continue
             value = p.qty * px
             if value > equity * cap * (1 + tol):
                 excess_qty = (value - equity * cap) / px
                 if excess_qty * px >= self.s.risk.min_order_notional_tmn:
-                    self._reduce(sym, excess_qty, f"rebalance: {value / equity:.1%} of equity > basket cap {cap:.0%}", prices, markets, now)
+                    self.last_rebalance[sym] = now
+                    self._reduce(sym, excess_qty, f"rebalance: {value / equity:.1%} of equity > target {cap:.0%} (band ±{tol:.0%})", prices, markets, now)
 
         # periodic "why am I holding" record so the log never goes silent while a position is open
         if self.pf.positions and now - self.last_hold_log >= self.s.strategy.hold_log_minutes * 60:
