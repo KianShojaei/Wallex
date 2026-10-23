@@ -17,6 +17,7 @@ def test_dashboard_endpoints(tmp_path: Path):
     base = f"http://127.0.0.1:{srv.server_address[1]}"
     try:
         assert urllib.request.urlopen(base + "/healthz").status == 200
+        assert urllib.request.urlopen(base + "/").status == 200          # public landing page for uptime monitors
         try:
             urllib.request.urlopen(base + "/api/status"); assert False, "token required"
         except urllib.error.HTTPError as e:

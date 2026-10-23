@@ -21,6 +21,14 @@ from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger(__name__)
 HTML_PATH = Path(__file__).with_name("index.html")
+LOGIN_HTML = """<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wallex Agent</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/Vazirmatn-font-face.css">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0f14;color:#e8eef5;font-family:Vazirmatn,system-ui,sans-serif}
+.box{background:#141c25;border:1px solid #1f2a38;border-radius:16px;padding:28px 32px;width:min(92vw,380px);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+h1{font-size:18px;margin:0 0 6px}p{color:#8a98a8;font-size:13px;margin:0 0 16px}input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid #1f2a38;background:#10161d;color:#e8eef5;font:inherit;direction:ltr}
+button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:10px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;font:inherit;font-weight:700;cursor:pointer}</style></head>
+<body><form class="box" onsubmit="location.href='/?token='+encodeURIComponent(t.value);return false"><h1>ایجنت معاملاتی والکس</h1><p>برای مشاهده‌ی داشبورد، توکن دسترسی را وارد کنید.</p>
+<input id="t" placeholder="token" autofocus><button>ورود</button></form></body></html>"""
 
 
 class DashboardState:
@@ -151,6 +159,12 @@ def make_handler(state: DashboardState, token: str):
             if u.path == "/healthz":
                 st = state.status(); fresh = st.get("updated_at") and time.time() - float(st["updated_at"]) < 300
                 return self._send(200 if fresh else 503, (b"ok" if fresh else b"stale"), "text/plain")
+            if u.path in ("/", "/index.html") and not self._authed(q):
+                # Public landing page (HTTP 200) so platform uptime monitors do not flag the app as down;
+                # all data endpoints stay behind the token.
+                return self._send(200, LOGIN_HTML.encode("utf-8"), "text/html; charset=utf-8")
+            if u.path in ("/robots.txt",):
+                return self._send(200, b"User-agent: *\nDisallow: /\n", "text/plain")
             if not self._authed(q):
                 return self._send(401, b"unauthorized: add ?token=...", "text/plain")
             if u.path == "/api/status":
