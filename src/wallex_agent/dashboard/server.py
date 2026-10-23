@@ -83,6 +83,8 @@ def make_handler(state: DashboardState, token: str):
     mcp = MCPHandler(state)
 
     class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
         def log_message(self, fmt, *args):  # quiet
             log.debug("dash %s", fmt % args)
 
@@ -95,6 +97,25 @@ def make_handler(state: DashboardState, token: str):
             self.end_headers()
             self.wfile.write(body)
 
+        def _read_body(self) -> bytes:
+            """Support both Content-Length and chunked transfer encoding (some MCP clients stream the JSON body)."""
+            te = (self.headers.get("Transfer-Encoding") or "").lower()
+            if "chunked" in te:
+                chunks = []
+                while True:
+                    line = self.rfile.readline().strip()
+                    if not line:
+                        break
+                    size = int(line.split(b";")[0], 16)
+                    if size == 0:
+                        self.rfile.readline()          # trailing CRLF
+                        break
+                    chunks.append(self.rfile.read(size))
+                    self.rfile.readline()              # CRLF after chunk
+                return b"".join(chunks)
+            n = int(self.headers.get("Content-Length") or 0)
+            return self.rfile.read(n) if n else b""
+
         def _authed(self, q) -> bool:
             if not token:
                 return True
@@ -106,8 +127,7 @@ def make_handler(state: DashboardState, token: str):
                 return self._send(404, b"not found", "text/plain")
             if not self._authed(q):
                 return self._send(401, json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32001, "message": "unauthorized"}}).encode(), "application/json")
-            n = int(self.headers.get("Content-Length") or 0)
-            body = self.rfile.read(n) if n else b""
+            body = self._read_body()
             code, out = mcp.handle(body)
             if code == 202:
                 self.send_response(202); self.send_header("Content-Length", "0"); self.end_headers(); return

@@ -65,7 +65,9 @@ class MCPHandler:
             return None
         try:
             if method == "initialize":
-                result = {"protocolVersion": params.get("protocolVersion", PROTOCOL), "capabilities": {"tools": {"listChanged": False}},
+                req = str(params.get("protocolVersion") or PROTOCOL)
+                result = {"protocolVersion": req if req in ("2024-11-05", "2025-03-26", "2025-06-18") else PROTOCOL,
+                          "capabilities": {"tools": {"listChanged": False}},
                           "serverInfo": {"name": "wallex-agent", "version": "0.1.0"},
                           "instructions": "Read-only view of an autonomous Wallex trading agent (StarCoach hackathon). "
                                           "Use get_status first; get_decisions explains every trade and every rejection."}
