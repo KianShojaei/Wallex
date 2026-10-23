@@ -158,6 +158,8 @@ def make_handler(state: DashboardState, token: str):
             u = urlparse(self.path); q = parse_qs(u.query)
             if u.path == "/mcp":
                 return self._send(405, b"MCP: use POST (stateless Streamable HTTP, no SSE stream)", "text/plain")
+            if u.path == "/favicon.ico":
+                return self._send(204, b"", "image/x-icon")
             if u.path == "/healthz":
                 st = state.status(); fresh = st.get("updated_at") and time.time() - float(st["updated_at"]) < 300
                 return self._send(200 if fresh else 503, (b"ok" if fresh else b"stale"), "text/plain")

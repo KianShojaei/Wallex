@@ -41,7 +41,10 @@
   .cyc ul{margin:6px 0 0;padding-inline-start:14px} .cyc li{margin:2px 0} .cyc b.sym{color:var(--fg)}
   .badge.error,.badge.kill_switch,.badge.exit_failed,.badge.entry_failed{color:var(--red);border-color:rgba(239,68,68,.5)}
   .small{font-size:12px;color:var(--muted)} .ltr{direction:ltr;text-align:left} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
-  svg{width:100%;height:150px;display:block} .scroll{max-height:520px;overflow:auto;border-radius:10px}
+  svg{width:100%;height:220px;display:block} .scroll{max-height:520px;overflow:auto;border-radius:10px}
+  .chartwrap{position:relative;direction:ltr} .tip{position:absolute;pointer-events:none;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:12px;box-shadow:var(--shadow);white-space:nowrap;direction:rtl;z-index:2}
+  .ranges .rb{cursor:pointer;border:1px solid var(--line);background:var(--card2);color:var(--muted);border-radius:8px;padding:2px 9px;font:inherit;font-size:11px;margin-inline-start:4px} .ranges .rb.on{color:var(--fg);border-color:var(--blue)}
+  .ax{font-size:10px;fill:var(--muted);font-family:inherit}
   select{font:inherit;font-size:12px;background:var(--card2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:4px 8px}
   .regime{padding:10px 12px;border-radius:12px;background:var(--card2);border:1px solid var(--line);margin-bottom:8px}
   .bar{height:6px;border-radius:999px;background:var(--line);overflow:hidden;margin-top:6px} .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--violet))}
@@ -67,13 +70,17 @@
   <div class="card kpi"><div class="l">سود/زیان محقق‌شده</div><div class="v" id="realized">—</div><div class="s" id="fees">کارمزد: —</div></div>
   <div class="card kpi"><div class="l">نقد تومانی</div><div class="v" id="cash">—</div><div class="s" id="expo">در بازار: —</div></div>
   <div class="card kpi"><div class="l">افت از سقف</div><div class="v" id="dd">—</div><div class="s" id="ddd">امروز: —</div></div>
-  <div class="card kpi"><div class="l">معاملات بسته‌شده</div><div class="v" id="trades">—</div><div class="s" id="winrate">نرخ برد: —</div></div>
   <div class="card kpi"><div class="l">هوش مصنوعی</div><div class="v" id="ai">—</div><div class="s" id="aimodel">—</div></div>
   <div class="card kpi"><div class="l">تا تسویه‌ی خودکار</div><div class="v" id="countdown" style="font-size:18px">—</div><div class="s" id="endts">—</div></div>
 </div>
 
 <div class="two">
-  <div class="card"><div class="title"><span>منحنی ارزش حساب</span><span class="small" id="curveinfo"></span></div><svg id="curve" viewBox="0 0 600 150" preserveAspectRatio="none"></svg></div>
+  <div class="card">
+    <div class="title"><span>منحنی ارزش حساب</span>
+      <span class="ranges"><button class="rb" data-r="1">۱ ساعت</button><button class="rb" data-r="6">۶ ساعت</button><button class="rb" data-r="24">۲۴ ساعت</button><button class="rb on" data-r="0">همه</button></span></div>
+    <div class="chartwrap"><svg id="curve" viewBox="0 0 600 220" preserveAspectRatio="none"></svg><div id="tip" class="tip" hidden></div></div>
+    <div class="small" id="curveinfo" style="margin-top:6px"></div>
+  </div>
   <div class="card"><div class="title"><span>رژیم بازار · تشخیص AI</span></div><div id="regimes"><div class="empty">هنوز تحلیلی انجام نشده</div></div></div>
 </div>
 
@@ -107,13 +114,44 @@ const ago=ts=>{const s=Math.max(0,Date.now()/1000-ts);return s<90?Math.round(s)+
 const dur=sec=>{sec=Math.max(0,sec);const d=Math.floor(sec/86400),h=Math.floor((sec%86400)/3600),m=Math.floor((sec%3600)/60);return (d?d+" روز ":"")+(h?h+" ساعت ":"")+m+" دقیقه"};
 const theme=document.getElementById("theme");theme.onclick=()=>{const r=document.documentElement;const t=r.getAttribute("data-theme")==="light"?"":"light";t?r.setAttribute("data-theme",t):r.removeAttribute("data-theme");try{localStorage.setItem("wa-theme",t)}catch(e){}};
 try{const t=localStorage.getItem("wa-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}
-function curve(pts){const svg=document.getElementById("curve");if(!pts||pts.length<2){svg.innerHTML="";return}
-  const ys=pts.map(p=>p[1]),mn=Math.min(...ys),mx=Math.max(...ys),r=(mx-mn)||1,W=600,H=150,pad=8;
-  const X=i=>(i/(pts.length-1)*W).toFixed(1),Y=v=>(H-pad-(v-mn)/r*(H-2*pad)).toFixed(1);
-  const d=pts.map((p,i)=>(i?"L":"M")+X(i)+","+Y(p[1])).join(" ");const base=pts[0][1],up=ys[ys.length-1]>=base,col=up?"var(--green)":"var(--red)";
-  svg.innerHTML=`<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${up?'#22c55e':'#ef4444'}" stop-opacity=".35"/><stop offset="1" stop-color="${up?'#22c55e':'#ef4444'}" stop-opacity="0"/></linearGradient></defs>
-  <line x1="0" y1="${Y(base)}" x2="${W}" y2="${Y(base)}" stroke="var(--line)" stroke-dasharray="4 4"/><path d="${d} L${W},${H} L0,${H} Z" fill="url(#g)"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2.2"/>`;
-  document.getElementById("curveinfo").textContent=`${pts.length} نقطه · کمینه ${fmt(mn)} · بیشینه ${fmt(mx)}`}
+// ---------- interactive equity chart (vanilla SVG) ----------
+const chart={pts:[],events:[],rangeH:0,initial:5000000};
+const hhmm=ts=>new Date(ts*1000).toLocaleTimeString("fa-IR",{timeZone:"Asia/Tehran",hour:"2-digit",minute:"2-digit",hour12:false});
+const dmy=ts=>new Date(ts*1000).toLocaleDateString("fa-IR",{timeZone:"Asia/Tehran",month:"2-digit",day:"2-digit"});
+function curve(){
+  const svg=document.getElementById("curve"),tip=document.getElementById("tip");
+  let pts=chart.pts||[];
+  if(chart.rangeH>0){const cut=Date.now()/1000-chart.rangeH*3600;const f=pts.filter(p=>p[0]>=cut);if(f.length>=2)pts=f}
+  if(pts.length<2){svg.innerHTML=`<text class="ax" x="300" y="110" text-anchor="middle">داده‌ی کافی نیست</text>`;document.getElementById("curveinfo").textContent="";return}
+  const W=600,H=220,L=8,R=8,T=14,B=26;
+  const ys=pts.map(p=>p[1]),mn=Math.min(...ys),mx=Math.max(...ys),r=(mx-mn)||1,t0=pts[0][0],t1=pts[pts.length-1][0],tr=(t1-t0)||1;
+  const X=t=>L+(t-t0)/tr*(W-L-R),Y=v=>T+(1-(v-mn)/r)*(H-T-B);
+  const base=chart.initial||pts[0][1],last=ys[ys.length-1],up=last>=pts[0][1],col=up?"#22c55e":"#ef4444";
+  const d=pts.map((p,i)=>(i?"L":"M")+X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1)).join(" ");
+  // gridlines (4) with equity labels + return % vs initial
+  let grid="";for(let k=0;k<=4;k++){const v=mn+r*k/4,y=Y(v);grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-width="1"/><text class="ax" x="${L+2}" y="${(y-3).toFixed(1)}">${fmt(v)} (${pct((v/base-1)*100,2)})</text>`}
+  // time axis (5 ticks)
+  let tax="";for(let k=0;k<=4;k++){const t=t0+tr*k/4,x=X(t);tax+=`<text class="ax" x="${x.toFixed(1)}" y="${H-8}" text-anchor="${k===0?"start":(k===4?"end":"middle")}">${hhmm(t)}${tr>86400?" "+dmy(t):""}</text>`}
+  // baseline (initial capital) if inside range
+  let baseLine="";if(base>=mn&&base<=mx)baseLine=`<line x1="${L}" y1="${Y(base).toFixed(1)}" x2="${W-R}" y2="${Y(base).toFixed(1)}" stroke="var(--amber)" stroke-dasharray="5 4" stroke-width="1.2"/><text class="ax" x="${W-R-2}" y="${(Y(base)-3).toFixed(1)}" text-anchor="end" fill="var(--amber)">سرمایه اولیه</text>`;
+  // trade markers
+  let marks="";for(const e of chart.events){if(e.t<t0||e.t>t1)continue;const x=X(e.t);let yv=pts.reduce((a,p)=>Math.abs(p[0]-e.t)<Math.abs(a[0]-e.t)?p:a)[1];const y=Y(yv);
+    const c=e.kind==="exit"?"var(--blue)":(e.kind==="rebalance"?"var(--violet)":"var(--green)");marks+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${c}" stroke="var(--card)" stroke-width="1.5"><title>${e.kind} ${e.symbol||""} ${hhmm(e.t)}</title></circle>`}
+  svg.innerHTML=`<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".35"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+  ${grid}${baseLine}<path d="${d} L${X(t1).toFixed(1)},${H-B} L${L},${H-B} Z" fill="url(#g)"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round"/>
+  ${marks}<circle cx="${X(t1).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="4" fill="${col}"/>
+  <g id="cross" style="display:none"><line id="cx" x1="0" y1="${T}" x2="0" y2="${H-B}" stroke="var(--muted)" stroke-dasharray="3 3"/><circle id="cp" r="5" fill="${col}" stroke="var(--card)" stroke-width="2"/></g>${tax}`;
+  let peak=-1,mdd=0;for(const v of ys){peak=Math.max(peak,v);mdd=Math.max(mdd,(peak-v)/peak*100)}
+  document.getElementById("curveinfo").textContent=`${pts.length} نقطه · از ${hhmm(t0)} تا ${hhmm(t1)} · کمینه ${fmt(mn)} · بیشینه ${fmt(mx)} · تغییر در بازه ${pct((last/pts[0][1]-1)*100,2)} · بیشینه افت در بازه ${mdd.toFixed(2)}٪`;
+  // hover
+  svg.onmousemove=ev=>{const rect=svg.getBoundingClientRect();const x=(ev.clientX-rect.left)/rect.width*W;const t=t0+(x-L)/(W-L-R)*tr;
+    let best=pts[0];for(const p of pts){if(Math.abs(p[0]-t)<Math.abs(best[0]-t))best=p}
+    const bx=X(best[0]),by=Y(best[1]);const g=svg.querySelector("#cross");g.style.display="";svg.querySelector("#cx").setAttribute("x1",bx);svg.querySelector("#cx").setAttribute("x2",bx);const cp=svg.querySelector("#cp");cp.setAttribute("cx",bx);cp.setAttribute("cy",by);
+    tip.hidden=false;tip.innerHTML=`<b>${fmt(best[1])}</b> تومان<br><span class="${cls(best[1]/base-1)}">${pct((best[1]/base-1)*100,2)}</span> از سرمایه اولیه<br><span class="small">${dmy(best[0])} ${hhmm(best[0])}</span>`;
+    const px=bx/W*rect.width,py=by/H*rect.height;tip.style.left=Math.min(rect.width-150,Math.max(0,px-70))+"px";tip.style.top=Math.max(0,py-70)+"px"};
+  svg.onmouseleave=()=>{tip.hidden=true;const g=svg.querySelector("#cross");if(g)g.style.display="none"};
+}
+document.querySelectorAll(".rb").forEach(b=>b.onclick=()=>{document.querySelectorAll(".rb").forEach(x=>x.classList.remove("on"));b.classList.add("on");chart.rangeH=Number(b.dataset.r);curve()});
 async function load(){
   try{
     const st=await (await fetch(url("/api/status"))).json();
@@ -129,10 +167,11 @@ async function load(){
     const rl=document.getElementById("realized");rl.textContent=fmt(s.realized_pnl_tmn);rl.className="v "+cls(s.realized_pnl_tmn);document.getElementById("fees").textContent="کارمزد پرداختی: "+fmt(s.fees_paid_tmn)+" تومان";
     document.getElementById("cash").textContent=fmt(s.cash_tmn);document.getElementById("expo").textContent="در بازار: "+fmt(s.exposure_tmn)+" تومان ("+(s.equity_tmn?Math.round(s.exposure_tmn/s.equity_tmn*100):0)+"٪)";
     const dd=document.getElementById("dd");dd.textContent=pct(-(r.drawdown_pct||0));dd.className="v "+((r.drawdown_pct||0)>2?"warn":"");document.getElementById("ddd").textContent="امروز: "+pct(-(r.daily_drawdown_pct||0))+" · سقف "+fmt(r.peak_equity);
-    document.getElementById("trades").textContent=s.trades;document.getElementById("winrate").textContent="نرخ برد: "+(s.trades?Math.round(s.wins/s.trades*100)+"٪":"—")+` (${s.wins} برنده)`;
     document.getElementById("ai").textContent=st.ai?`$${Number(st.ai.cost_usd).toFixed(2)}`:"—";document.getElementById("aimodel").textContent=st.ai?`${st.ai.calls} فراخوانی · ${st.ai.model_fast.split("/")[1]} / ${st.ai.model_deep.split("/")[1]}`:"";
     const left=c.liquidate_at-now;const cd=document.getElementById("countdown");cd.textContent=left>0?dur(left):"در پنجره‌ی تسویه";cd.className="v "+(left<3600?"warn":"");document.getElementById("endts").textContent="پایان چالش: "+(c.end_ts?tehran(c.end_ts):"");
-    curve(st.equity_curve);
+    chart.pts=st.equity_curve||[];chart.initial=c.initial_capital||5000000;
+    try{const ev=await (await fetch(url("/api/decisions","n=300&kind=entry,top_up,exit,rebalance"))).json();chart.events=ev.map(e=>({t:Date.parse(e.ts)/1000,kind:e.kind,symbol:e.symbol})).filter(e=>!isNaN(e.t))}catch(e){chart.events=[]}
+    curve();
     const rg=document.getElementById("regimes");const regs=Object.entries(st.regimes||{});
     rg.innerHTML=regs.length?regs.map(([k,v])=>`<div class="regime"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${k}</b><span><span class="badge regime">${v.regime}</span> <span class="small">${v.allow_entries?"ورود ✅":"ورود ⛔"} · اندازه ${v.size_factor} · ${v.age_min} دقیقه پیش</span></span></div><div class="bar"><i style="width:${Math.round(v.confidence*100)}%"></i></div><div class="small ltr" style="margin-top:6px">${v.summary||""}</div></div>`).join(""):`<div class="empty">هنوز تحلیلی انجام نشده</div>`;
     const pb=document.getElementById("positions");pb.innerHTML=(st.positions&&st.positions.length)?st.positions.map(p=>`<tr><td><b>${p.symbol}</b></td><td><span class="badge">${p.module}</span></td><td class="num">${fmt(p.value_tmn)}</td><td class="num">${fmt(p.entry_price)}</td><td class="num">${fmt(p.price)}</td><td class="num ${cls(p.upnl_pct)}"><b>${pct(p.upnl_pct)}</b></td><td class="num">${fmt(p.stop_loss)}</td><td>${dur(now-p.entry_time)}${p.adds?` <span class="small">(+${p.adds} افزایش)</span>`:""}</td></tr>`).join(""):`<tr><td colspan="8" class="empty">بدون پوزیشن · ۱۰۰٪ تومان</td></tr>`;
