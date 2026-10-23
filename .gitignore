@@ -15,3 +15,5 @@ logs/*.log
 logs/ai_cache/
 logs/backtests/
 logs/decisions/backtest_*
+data/state/
+data/logs/

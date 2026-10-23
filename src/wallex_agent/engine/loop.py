@@ -62,6 +62,43 @@ def build_agent(s, mode: str, ai_mode: str = "live", mcp: bool = False):
     return client, agent, md, state_path, mcp_bridge
 
 
+def write_status(s, mode, agent, prices, markets, snaps, summ, res, t0, state_dir: Path) -> None:
+    """Snapshot for the web dashboard (state/status_<mode>.json)."""
+    import json
+    regimes = {k: {**v.model_dump(), "age_min": round((t0 - agent.regime_ts.get(k, t0)) / 60)} for k, v in agent.regimes.items()}
+    status = {
+        "mode": mode, "updated_at": t0, "git_commit": _git_commit()[:10],
+        "challenge": {"start": s.challenge.start.isoformat(), "end": s.challenge.end.isoformat(),
+                      "liquidate_at": agent.risk.liq_ts, "end_ts": agent.risk.end_ts,
+                      "initial_capital": s.challenge.initial_capital_tmn},
+        "summary": summ,
+        "prices": {k: round(v, 2) for k, v in prices.items()},
+        "markets": {k: {"bid": m.bid, "ask": m.ask, "spread_pct": round(m.spread_pct, 4), "vol24_tmn": m.quote_volume_24h,
+                        "change_24h_pct": m.change_24h_pct} for k, m in markets.items() if k in prices},
+        "positions": [{"symbol": p.symbol, "module": p.module, "qty": p.qty, "entry_price": p.entry_price, "entry_time": p.entry_time,
+                       "stop_loss": p.stop_loss, "take_profit": p.take_profit, "highest": p.highest, "adds": p.adds,
+                       "price": prices.get(p.symbol), "upnl_pct": round(p.unrealized_pct(prices.get(p.symbol, p.entry_price)), 3),
+                       "value_tmn": round(p.qty * prices.get(p.symbol, p.entry_price))} for p in agent.pf.positions.values()],
+        "snapshots": {k: v.to_dict() for k, v in snaps.items()},
+        "regimes": regimes,
+        "last_step": res,
+        "ai": {"enabled": agent.analyst is not None, "calls": agent.analyst.llm.calls if agent.analyst else 0,
+               "cost_usd": round(agent.analyst.llm.total_cost_usd, 4) if agent.analyst else 0.0,
+               "model_fast": s.ai_model_fast, "model_deep": s.ai_model_deep},
+        "equity_curve": agent.pf.equity_curve[-2000:],
+        "risk": {"killed": agent.pf.killed, "halted_today": agent.pf.halted_until_day == agent.pf.day_key,
+                 "peak_equity": agent.pf.peak_equity, "day_start_equity": agent.pf.day_start_equity,
+                 "drawdown_pct": round(agent.pf.drawdown_pct(summ["equity_tmn"]), 3),
+                 "daily_drawdown_pct": round(agent.pf.daily_drawdown_pct(summ["equity_tmn"]), 3),
+                 "limits": s.risk.model_dump()},
+        "decision_log": str(agent.log.path),
+    }
+    state_dir.mkdir(parents=True, exist_ok=True)
+    tmp = state_dir / f"status_{mode}.tmp"
+    tmp.write_text(json.dumps(status, ensure_ascii=False, default=str), encoding="utf-8")
+    tmp.replace(state_dir / f"status_{mode}.json")
+
+
 def _git_commit() -> str:
     """Record which code version produced the trades (judging: delivered code == running code)."""
     import subprocess
@@ -137,6 +174,7 @@ def run(s, mode: str, ai_mode: str = "live", once: bool = False, mcp: bool = Fal
             res = agent.step(t0, snaps, prices, markets, recent, frames=frames)
             agent.pf.save(state_path)
             summ = agent.pf.summary(prices)
+            write_status(s, mode, agent, prices, markets, snaps, summ, res, t0, state_path.parent)
             log.info("loop ok | equity=%s TMN (%.2f%%) | pos=%d | entries=%s exits=%s | ai_calls=%d cost=$%.4f",
                      f"{summ['equity_tmn']:,}", summ["return_pct"], len(agent.pf.positions), res["entries"], res["exits"],
                      agent.analyst.llm.calls if agent.analyst else 0, agent.analyst.llm.total_cost_usd if agent.analyst else 0)

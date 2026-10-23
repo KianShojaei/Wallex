@@ -179,6 +179,32 @@ def cmd_sell_balance(s, a):
     console.print("balances:", {k: v for k, v in c.balances().items() if v["value"] > 0})
 
 
+def cmd_serve(s, a):
+    """Run the trading loop AND the web dashboard in one process (what the Liara container runs)."""
+    import os
+    from wallex_agent.dashboard.server import start_dashboard
+    from wallex_agent.engine.loop import run
+    mode = a.mode or (s.run_mode if s.run_mode in ("shadow", "live") else "shadow")
+    port = int(os.getenv("PORT", a.port))
+    token = os.getenv("DASHBOARD_TOKEN", "")
+    start_dashboard(s.execution.state_dir, s.execution.decision_log_dir, mode, port, token)
+    if mode == "live" and not s.wallex_api_key:
+        sys.exit("live mode needs WALLEX_API_KEY")
+    console.print(f"[bold]{'LIVE' if mode == 'live' else 'SHADOW'}[/] agent + dashboard on port {port}")
+    run(s, mode, ai_mode=a.ai, mcp=a.mcp)
+
+
+def cmd_dashboard(s, a):
+    """Dashboard only (read-only view of an agent running elsewhere on the same disk)."""
+    import os
+    from wallex_agent.dashboard.server import start_dashboard
+    port = int(os.getenv("PORT", a.port))
+    start_dashboard(s.execution.state_dir, s.execution.decision_log_dir, a.mode, port, os.getenv("DASHBOARD_TOKEN", ""))
+    console.print(f"dashboard on http://localhost:{port}")
+    while True:
+        time.sleep(3600)
+
+
 def cmd_report(s, a):
     from wallex_agent.backtest.report import summarize_logs
     summarize_logs(Path(a.path or s.execution.decision_log_dir), console)
@@ -195,6 +221,9 @@ def main(argv=None):
     st = sub.add_parser("status"); st.add_argument("--mode", default="shadow"); st.set_defaults(fn=cmd_status)
     lq = sub.add_parser("liquidate"); lq.add_argument("--mode", default="live"); lq.set_defaults(fn=cmd_liquidate)
     rp = sub.add_parser("report"); rp.add_argument("--path"); rp.set_defaults(fn=cmd_report)
+    sv = sub.add_parser("serve", help="agent loop + web dashboard (for Liara/Docker)"); sv.add_argument("--mode", choices=["shadow", "live"], default=None)
+    sv.add_argument("--ai", choices=["live", "replay", "off"], default="live"); sv.add_argument("--mcp", action="store_true"); sv.add_argument("--port", type=int, default=8000); sv.set_defaults(fn=cmd_serve)
+    db = sub.add_parser("dashboard", help="web dashboard only"); db.add_argument("--mode", default="live"); db.add_argument("--port", type=int, default=8000); db.set_defaults(fn=cmd_dashboard)
     so = sub.add_parser("smoke-order", help="one tiny real buy+sell to validate the live order path")
     so.add_argument("--symbol", default="USDTTMN"); so.add_argument("--notional", type=float, default=300000); so.add_argument("--style", choices=["maker", "taker"], default="taker")
     so.add_argument("--timeout", type=int, default=60); so.add_argument("-y", "--yes", action="store_true"); so.set_defaults(fn=cmd_smoke_order)

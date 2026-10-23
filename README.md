@@ -168,6 +168,24 @@ wallex-agent liquidate --mode live        # خروج اضطراری الگوری
 ```
 وضعیت پرتفوی در `state/portfolio_<mode>.json` ذخیره می‌شود؛ بعد از کرش/ری‌استارت ادامه می‌دهد (`docker compose` با `restart: unless-stopped`).
 
+### داشبورد وب و اجرای ۲۴ ساعته (لیارا / داکر)
+دستور `serve` ایجنت و یک داشبورد وب لحظه‌ای را در یک پروسه اجرا می‌کند (`src/wallex_agent/dashboard/`): ارزش حساب، بازده، منحنی equity، پوزیشن‌ها، رژیم تشخیص‌داده‌شده‌ی AI، بازارها و لاگ تصمیم با فیلتر؛ هر ۱۵ ثانیه به‌روز می‌شود. مسیرهای `/api/status`، `/api/decisions` و `/healthz` هم برای داوران/مانیتورینگ باز است. با متغیر `DASHBOARD_TOKEN` قفل می‌شود (`/?token=...`).
+
+```bash
+wallex-agent serve --mode live            # محلی: http://localhost:8000
+docker compose up -d --build              # داکر: همان + ری‌استارت خودکار، داده در ./data
+```
+
+**دیپلوی روی لیارا** (`liara.json` در ریپو است؛ پلتفرم Docker، پورت ۸۰۰۰، دیسک `data` روی `/app/data`):
+```bash
+npm i -g @liara/cli && liara login
+liara disk create --app <APP> --name data --size 1        # دیسک دائمی برای state و لاگ‌ها
+liara env set --app <APP> WALLEX_API_KEY=... AI_API_KEY=... RUN_MODE=live DASHBOARD_TOKEN=<رمز> \
+  AI_BASE_URL=https://ai.boxapi.ir/ai/v1 AI_MODEL_FAST=openai/gpt-6-luna AI_MODEL_DEEP=openai/gpt-6-sol
+liara deploy --app <APP> --port 8000
+```
+بعد از دیپلوی: `https://<APP>.liara.run/?token=<رمز>`. لاگ تصمیم و وضعیت در دیسک `data` می‌ماند و با ری‌استارت از بین نمی‌رود؛ برای تحویل، از پنل لیارا یا با `liara shell` فایل‌های `/app/data/logs/decisions/*.jsonl` را بردارید.
+
 ### تست‌های واحد
 ```bash
 pytest -q        # ۱۳ تست: اندیکاتورها، سیگنال‌ها، ریسک (سایز/سقف‌ها/خروج‌ها/Drawdown)، بک‌تست end-to-end، تکرارپذیری، فالبک AI

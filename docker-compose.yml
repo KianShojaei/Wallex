@@ -1,12 +1,13 @@
-# Stable 3-day run: auto-restart on crash, state/logs persisted on the host.
+# Local / VPS run: auto-restart on crash, state/logs persisted on the host, dashboard on :8000.
 services:
   agent:
     build: .
     env_file: .env
-    command: ["run", "--mode", "${RUN_MODE:-shadow}", "--ai", "live", "-y"]
+    environment:
+      - RUN_MODE=${RUN_MODE:-shadow}
+    command: ["serve"]
+    ports: ["8000:8000"]
     restart: unless-stopped
     volumes:
-      - ./state:/app/state
-      - ./logs:/app/logs
       - ./data:/app/data
       - ./config:/app/config:ro
