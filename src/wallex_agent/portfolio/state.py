@@ -31,6 +31,11 @@ class Position:
     def cost_tmn(self) -> float:
         return self.qty * self.entry_price
 
+    @property
+    def paid_tmn(self) -> float:
+        """TMN actually spent: notional + in-kind buy fee valued at entry (fee was deducted from qty, not cash)."""
+        return self.qty * self.entry_price + self.entry_fee_tmn
+
     def unrealized_pct(self, price: float) -> float:
         return (price / self.entry_price - 1) * 100
 

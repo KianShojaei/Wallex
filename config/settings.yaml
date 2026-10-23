@@ -95,7 +95,7 @@ risk:
   top_up_cooldown_minutes: 360          # a module may add to an open position at most every 6h (if AI/regime allow a bigger size)
   min_order_notional_tmn: 300000
   fee_pct: 0.30                         # Wallex TMN markets: taker 0.30%
-  maker_fee_pct: 0.25                   #                     maker 0.25%  (live mode reads /v1/account/fee)
+  maker_fee_pct: 0.20                   #                     maker 0.20% (verified from a live fill; live mode reads /v1/account/fee)
   slippage_pct: 0.02                    # shadow/backtest fill assumption (USDTTMN spread is ~0.003%)
 
 execution:

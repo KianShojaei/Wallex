@@ -67,7 +67,9 @@ class SimulatedBroker(Broker):
         if qty <= 0 or qty < market.min_qty:
             return Fill(False, "", symbol, "BUY", 0, px, 0, 0, "REJECTED", error="qty below minimum")
         notional = qty * px
-        return Fill(True, f"sim-{uuid.uuid4().hex[:10]}", symbol, "BUY", qty, px, notional, notional * self.fee_pct / 100, "FILLED")
+        fee_tmn = notional * self.fee_pct / 100
+        net_qty = qty * (1 - self.fee_pct / 100)          # Wallex charges buy fees in the base coin
+        return Fill(True, f"sim-{uuid.uuid4().hex[:10]}", symbol, "BUY", net_qty, px, notional, fee_tmn, "FILLED")
 
     def sell(self, symbol, qty, market, ref_price):
         px = ref_price * (1 - self.slip / 100)
@@ -95,15 +97,28 @@ class LiveBroker(Broker):
     # -------------------------------------------------------------- helpers
     @staticmethod
     def _parse(o: dict) -> dict:
-        def f(k, d=0.0):
+        """Wallex order object (verified live 2026-10-23): clientOrderId, status, origQty, executedQty, executedSum,
+        executedPrice (= limit price, NOT the average fill), fills[{price, quantity, fee, feeAsset, feeCoefficient}].
+        Fees are charged in the RECEIVED asset: buys pay fee in the base coin, sells pay fee in TMN."""
+        def f(k, d=0.0, src=None):
             try:
-                return float(o.get(k, d) or d)
+                return float((src or o).get(k, d) or d)
             except (TypeError, ValueError):
                 return d
+        fills = o.get("fills") or []
+        fee_base = sum(f("fee", 0.0, x) for x in fills if str(x.get("feeAsset", "")).upper() not in ("TMN", "IRT", "TOMAN"))
+        fee_quote = sum(f("fee", 0.0, x) for x in fills if str(x.get("feeAsset", "")).upper() in ("TMN", "IRT", "TOMAN"))
+        side = str(o.get("side", "")).upper()
+        if not fills and f("executedQty") > 0 and f("fee") > 0:
+            # no fill details: assume fee in received asset
+            if side == "BUY":
+                fee_base = f("fee")
+            else:
+                fee_quote = f("fee")
         return {"id": str(o.get("clientOrderId") or o.get("client_id") or o.get("id") or ""),
                 "status": str(o.get("status", "")).upper(), "executed_qty": f("executedQty"),
                 "executed_sum": f("executedSum"), "executed_price": f("executedPrice"),
-                "orig_qty": f("origQty"), "price": f("price")}
+                "orig_qty": f("origQty"), "price": f("price"), "fee_base": fee_base, "fee_quote": fee_quote}
 
     def _wait(self, order_id: str) -> dict:
         t0 = time.time()
@@ -142,7 +157,14 @@ class LiveBroker(Broker):
         eq, es = p.get("executed_qty", 0), p.get("executed_sum", 0)
         avg = es / eq if eq else (p.get("executed_price") or price or 0)
         ok = eq > 0
-        return Fill(ok, oid, symbol, side, eq, avg, es or eq * avg, (es or eq * avg) * self.fee_pct / 100,
+        notional = es or eq * avg
+        # fee accounting in TMN terms: base-asset fee valued at the fill price; the qty we actually RECEIVE on a buy
+        # is executedQty minus the base fee, so the position size reflects what can later be sold.
+        fee_tmn = p.get("fee_quote", 0.0) + p.get("fee_base", 0.0) * avg
+        if fee_tmn <= 0 and ok:
+            fee_tmn = notional * self.fee_pct / 100
+        net_qty = eq - p.get("fee_base", 0.0) if side == "BUY" else eq
+        return Fill(ok, oid, symbol, side, net_qty, avg, notional, fee_tmn,
                     p.get("status", ""), raw=raw if isinstance(raw, dict) else None,
                     error="" if ok else f"no fill (status {p.get('status')})")
 
@@ -166,7 +188,15 @@ class LiveBroker(Broker):
         return fill
 
     def sell(self, symbol, qty, market, ref_price):
-        """ref_price = best bid. Exits must happen: maker first, then taker fallback."""
+        """ref_price = best bid. Exits must happen: maker first, then taker fallback.
+        The quantity is capped at the free exchange balance of the base asset (fees were taken in-kind on the buy)."""
+        try:
+            free = self.c.balances().get(market.base, {}).get("free")
+            if free is not None and free < qty:
+                log.info("sell %s: capping qty %.8f to free balance %.8f", symbol, qty, free)
+                qty = free
+        except WallexError as e:
+            log.warning("balance check before sell failed: %s", e)
         qty = round_down(qty, market.qty_precision)
         if self.order_type == "MARKET":
             return self._submit(symbol, "SELL", qty, None, market)

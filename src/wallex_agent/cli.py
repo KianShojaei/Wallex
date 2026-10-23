@@ -129,8 +129,10 @@ def cmd_smoke_order(s, a):
     if not s.wallex_api_key:
         sys.exit("needs WALLEX_API_KEY")
     sym = a.symbol
-    if s.markets.is_blocked(sym) or sym not in s.markets.allowed:
-        sys.exit(f"{sym} is not an allowed challenge market")
+    if s.markets.is_blocked(sym):
+        sys.exit(f"{sym} is on the organisers' disabled list")
+    if sym not in s.markets.allowed:
+        console.print(f"[yellow]{sym} is not in markets.allowed; testing exchange acceptance only[/]")
     c = WallexClient(s.wallex_base_url, s.wallex_api_key)
     m = c.markets()[sym]
     console.print(f"market {sym}: bid={m.bid:,.0f} ask={m.ask:,.0f} qty_precision={m.qty_precision} price_precision={m.price_precision} min_qty={m.min_qty} min_notional={m.min_notional}")
@@ -158,6 +160,25 @@ def cmd_smoke_order(s, a):
     console.print("open orders:", c.open_orders(sym))
 
 
+def cmd_sell_balance(s, a):
+    """Sell the free exchange balance of a coin back to TMN (cleanup after smoke tests / manual recovery)."""
+    from wallex_agent.execution.broker import LiveBroker
+    from wallex_agent.wallex.client import WallexClient
+    c = WallexClient(s.wallex_base_url, s.wallex_api_key)
+    sym = a.symbol
+    m = c.markets()[sym]
+    free = c.balances().get(m.base, {}).get("free", 0.0)
+    console.print(f"{m.base} free balance: {free} (~{free * m.bid:,.0f} TMN)")
+    if free * m.bid < m.min_notional:
+        sys.exit("below exchange minimum notional; nothing to do")
+    if not a.yes and input(f"sell {free} {m.base} to TMN now? type YES: ").strip() != "YES":
+        sys.exit("aborted")
+    br = LiveBroker(c, s.risk.fee_pct, "LIMIT", s.execution.limit_offset_pct, a.timeout, style="taker")
+    fill = br.sell(sym, free, m, m.bid)
+    console.print(f"SELL ok={fill.ok} status={fill.status} qty={fill.qty} price={fill.price} notional={fill.notional_tmn:,.0f} fee_tmn={fill.fee_tmn:,.0f} err={fill.error!r}")
+    console.print("balances:", {k: v for k, v in c.balances().items() if v["value"] > 0})
+
+
 def cmd_report(s, a):
     from wallex_agent.backtest.report import summarize_logs
     summarize_logs(Path(a.path or s.execution.decision_log_dir), console)
@@ -177,6 +198,8 @@ def main(argv=None):
     so = sub.add_parser("smoke-order", help="one tiny real buy+sell to validate the live order path")
     so.add_argument("--symbol", default="USDTTMN"); so.add_argument("--notional", type=float, default=300000); so.add_argument("--style", choices=["maker", "taker"], default="taker")
     so.add_argument("--timeout", type=int, default=60); so.add_argument("-y", "--yes", action="store_true"); so.set_defaults(fn=cmd_smoke_order)
+    sb = sub.add_parser("sell-balance", help="sell a coin's free balance back to TMN"); sb.add_argument("--symbol", required=True)
+    sb.add_argument("--timeout", type=int, default=60); sb.add_argument("-y", "--yes", action="store_true"); sb.set_defaults(fn=cmd_sell_balance)
     a = p.parse_args(argv)
     _logging(a.verbose)
     s = load_settings(a.config)

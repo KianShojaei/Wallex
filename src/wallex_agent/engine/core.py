@@ -170,7 +170,7 @@ class Agent:
         if not fill.ok:
             log.warning("entry %s failed: %s", sig.symbol, fill.error)
             return
-        self.pf.cash_tmn -= fill.notional_tmn + fill.fee_tmn
+        self.pf.cash_tmn -= fill.notional_tmn            # buy fee is charged in the base coin (already netted from fill.qty)
         self.pf.fees_paid_tmn += fill.fee_tmn
         old = self.pf.positions.get(sig.symbol)
         if old is not None:                       # top-up: average in, keep stop/tp percentages from the new plan
@@ -200,7 +200,7 @@ class Agent:
             self.log.write("exit_failed", now=now, symbol=sym, reason=reason, error=fill.error)
             log.warning("exit %s failed: %s", sym, fill.error)
             return
-        pnl = fill.notional_tmn - fill.fee_tmn - p.cost_tmn - p.entry_fee_tmn
+        pnl = fill.notional_tmn - fill.fee_tmn - p.paid_tmn
         self.pf.cash_tmn += fill.notional_tmn - fill.fee_tmn
         self.pf.fees_paid_tmn += fill.fee_tmn
         self.pf.realized_pnl_tmn += pnl

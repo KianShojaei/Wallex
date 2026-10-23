@@ -70,7 +70,7 @@ class RiskCfg(BaseModel):
     top_up_cooldown_minutes: int = 360
     min_order_notional_tmn: float = 300_000
     fee_pct: float = 0.30
-    maker_fee_pct: float = 0.25
+    maker_fee_pct: float = 0.20
     slippage_pct: float = 0.05
 
 
