@@ -37,6 +37,7 @@ class Agent:
         self.log = dlog
         self.regimes: Dict[str, Regime] = {}
         self.regime_ts: Dict[str, float] = {}
+        self.retry_after: Dict[str, float] = {}      # symbol -> unix ts before which we do not re-consult the AI
         self.modules = build_modules(settings.strategy.modules)
 
     # ----------------------------------------------------------------- helpers
@@ -111,10 +112,16 @@ class Agent:
                                    reasons=sig.reasons, close=prices.get(sig.symbol))
         candidates.sort(key=lambda x: x.score, reverse=True)
 
+        retry_min = self.s.strategy.regime_refresh_minutes_when_blocked
         for sig in candidates:
             ok, blocks = self.risk.global_checks(self.pf, equity, now)
             if not ok and not (sig.symbol in self.pf.positions and all("max open positions" in b for b in blocks)):
                 self.log.write("no_entry", now=now, symbol=sig.symbol, reasons=blocks); break
+            if now < self.retry_after.get(sig.symbol, 0):
+                continue                                   # recently rejected: do not spam the AI every loop
+            held = self.pf.positions.get(sig.symbol)
+            if held is not None and now - getattr(held, "last_add_time", held.entry_time) < self.s.risk.top_up_cooldown_minutes * 60:
+                continue                                   # top-up cooldown: nothing to decide yet
             snap = snapshots[sig.symbol]
             extra = {k: v for k, v in (sig.snapshot or {}).items() if k not in snap.to_dict()}   # module-specific numbers (e.g. carry_r24)
             regime = self._refresh_regime(sig.symbol, snap, recent_bars.get(sig.symbol, []), now, mcp_ctx.get(sig.symbol), sig.module, extra)
@@ -122,10 +129,11 @@ class Agent:
             if regime and not regime.allow_entries and floor <= 0:
                 self.log.write("reject", now=now, symbol=sig.symbol, stage="regime", signal=sig.to_dict(),
                                regime=regime.model_dump(), reason="AI regime disallows entries")
+                self.retry_after[sig.symbol] = now + retry_min * 60
                 continue
             if regime and not regime.allow_entries and floor > 0:
                 self.log.write("ai_overruled", now=now, symbol=sig.symbol, stage="regime", regime=regime.model_dump(),
-                               reason=f"AI regime disallows entries but rule floor {floor:.0%} applies (score {sig.score:.2f})")
+                               reason=f"AI regime disallows entries but rule floor {floor:.0%} of cap applies (score {sig.score:.2f})")
             if self.analyst and self.s.strategy.ai_enabled:
                 rd = self._risk_defaults()
                 for k in ("max_position_pct", "stop_loss_pct", "take_profit_pct"):
@@ -143,10 +151,11 @@ class Agent:
                 if decision.action == "reject" and floor <= 0:
                     self.log.write("reject", now=now, symbol=sig.symbol, stage="ai", signal=sig.to_dict(),
                                    regime=regime.model_dump() if regime else None, decision=ddump, ai_used=ai_used)
+                    self.retry_after[sig.symbol] = now + retry_min * 60
                     continue
                 if decision.action == "reject":
                     self.log.write("ai_overruled", now=now, symbol=sig.symbol, stage="ai", decision=ddump,
-                                   reason=f"AI rejected but rule floor {floor:.0%} applies (score {sig.score:.2f})")
+                                   reason=f"AI rejected but rule floor {floor:.0%} of cap applies (score {sig.score:.2f})")
                     size_f, ai_sl, ai_tp = 0.0, decision.stop_loss_pct, None
                     rationale = f"[rule floor] {decision.rationale}"
                 else:
@@ -157,6 +166,7 @@ class Agent:
                                                regime_sf, now, overrides)
             if plan is None:
                 self.log.write("reject", now=now, symbol=sig.symbol, stage="risk", signal=sig.to_dict(), decision=ddump, reasons=notes)
+                self.retry_after[sig.symbol] = now + retry_min * 60
                 continue
             self._open(sig, plan, notes, ddump, regime, rationale, prices, markets, now)
             summary["entries"].append(sig.symbol)

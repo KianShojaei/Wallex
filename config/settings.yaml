@@ -51,8 +51,9 @@ strategy:
       momentum_on_pct: 0.3
       momentum_off_pct: -0.3
       min_score: 0.5
-      base_size_factor: 0.5             # rule floor: >=25% of equity whenever the FX regime is clearly on (score >= floor_min_score)
-      floor_min_score: 0.6              #   ...the AI advises on the remaining 25-50%; it cannot veto the floor
+      base_size_factor: 0.5             # rule floor at score 0.6: 50% of cap = 25% of equity
+      floor_max_size_factor: 0.8        # rule floor at score 1.0: 80% of cap = 40% of equity (linear in between)
+      floor_min_score: 0.6              # below this score there is no floor; the AI advises above the floor up to the cap
       max_position_pct: 0.50            # core may use up to 50% of equity (<= risk.max_total_exposure_pct)
       stop_loss_pct: 2.5                # tail protection only; regime exit is the normal way out
       take_profit_pct: 0                # 0 = no fixed take-profit
@@ -104,7 +105,7 @@ risk:
   daily_drawdown_halt_pct: 2.0          # no new entries for the rest of the day
   total_drawdown_kill_pct: 4.0          # flatten everything and stop
   cooldown_after_loss_minutes: 360      # re-entry wait after a stop-out (per symbol)
-  top_up_cooldown_minutes: 360          # a module may add to an open position at most every 6h (if AI/regime allow a bigger size)
+  top_up_cooldown_minutes: 60           # a module may add to an open position at most hourly (when the floor/AI allow a bigger size)
   min_order_notional_tmn: 300000
   fee_pct: 0.30                         # Wallex TMN markets: taker 0.30%
   maker_fee_pct: 0.20                   #                     maker 0.20% (verified from a live fill; live mode reads /v1/account/fee)

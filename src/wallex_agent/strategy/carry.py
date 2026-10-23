@@ -49,6 +49,7 @@ class CarryStrategy(StrategyModule):
         # base_size_factor x cap (research: passive exposure beat every timing filter). The AI sizes the rest.
         self.base_size_factor = float(cfg.get("base_size_factor", 0.5))
         self.floor_min_score = float(cfg.get("floor_min_score", 0.6))
+        self.floor_max_size_factor = float(cfg.get("floor_max_size_factor", 0.8))   # floor at score 1.0 (AI still owns the rest up to 1.0)
 
     def symbols(self, universe):
         return [self.symbol] if self.symbol in universe else []
@@ -110,9 +111,13 @@ class CarryStrategy(StrategyModule):
         snap.update({f"regime_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in st.items()})
         snap.update({f"carrier_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in car.items() if k != "note"})
         snap["regime_symbol"] = self.regime_symbol
-        floor = self.base_size_factor if (not vetoes and score >= self.floor_min_score) else 0.0
-        if floor:
-            reasons.append(f"rule floor active: score {score:.2f} >= {self.floor_min_score} -> at least {floor:.0%} of module cap")
+        floor = 0.0
+        if not vetoes and score >= self.floor_min_score:
+            # linear ramp: score=floor_min_score -> base_size_factor, score=1.0 -> floor_max_size_factor
+            t = (score - self.floor_min_score) / max(1e-9, 1.0 - self.floor_min_score)
+            floor = round(self.base_size_factor + (self.floor_max_size_factor - self.base_size_factor) * _clip(t), 3)
+            cap = float(self.cfg.get("max_position_pct") or 0.5)
+            reasons.append(f"rule floor: score {score:.2f} -> at least {floor:.0%} of module cap (~{floor * cap:.0%} of equity); AI sizes the rest")
         return [Signal(symbol=self.symbol, side="BUY", score=round(score, 4), module=self.name, reasons=reasons,
                        vetoes=vetoes, snapshot=snap, floor_size_factor=floor,
                        max_position_pct=self.cfg.get("max_position_pct"), stop_loss_pct=self.cfg.get("stop_loss_pct", 2.5),
