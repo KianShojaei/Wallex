@@ -8,7 +8,7 @@ challenge:
   # `liquidate_before_end_minutes` before `end`. Set these as soon as the organizers announce them.
   # Account activated 1405/08/01 10:17:52 Tehran = 2026-10-23 10:17:52 +03:30; challenge = 72 hours.
   start: "2026-10-23T10:17:52+03:30"
-  end:   "2026-10-26T10:17:52+03:30"
+  end:   "2026-10-26T23:00:00+03:30"    # organisers: Monday 1405/08/04 23:00 Tehran (agent flattens to TMN at 22:15)
   liquidate_before_end_minutes: 45
 
 markets:
@@ -18,6 +18,8 @@ markets:
   # NOTE: USDTTMN is READ (regime signal) but the challenge account rejects orders on it (verified 2026-10-23),
   # so it is deliberately NOT in this list. XAUTTMN (Tether Gold) is the tradable carrier of the Toman regime.
   # The carry basket: gold + the two most liquid cryptos, all as "USD asset x USDT/TMN" carriers.
+  # SCALING: to add a coin, append its TMN symbol here AND give it a weight under strategy.modules.carry.carriers.
+  # Everything else (trend guard, cap, AI sizing, rebalancing, reconciliation, dashboard, MCP) adapts automatically.
   allowed: [XAUTTMN, BTCTMN, ETHTMN]
   # symbols that are only observed, never traded
   observe: [USDTTMN]
@@ -109,7 +111,7 @@ strategy:
 risk:
   max_position_pct: 0.20                # default cap for modules that do not set their own
   max_total_exposure_pct: 0.95          # team decision: 80-95% in the market by regime strength, at least 5% TMN
-  max_open_positions: 3                 # the three basket carriers
+  max_open_positions: 10                # generous: the basket (carriers list) decides how many legs exist, this is only a hard sanity cap
   rebalance_tolerance_pct: 10           # trim ANY position when it exceeds its basket cap by >10% (relative); fee-free carriers use the tighter band above
   stop_loss_pct: 2.0                    # defaults, overridden per module above
   take_profit_pct: 0

@@ -175,11 +175,14 @@ class Agent:
 
         # 3) entries ---------------------------------------------------------
         ok, blocks = self.risk.global_checks(self.pf, equity, now)
-        if not ok:
+        only_max_pos = bool(blocks) and all("max open positions" in b for b in blocks)
+        if not ok and not only_max_pos:
             self.log.write("no_entry", now=now, reasons=blocks, equity=equity)
             summary["skipped"] = blocks
             note("*", "no new entries this cycle: " + "; ".join(blocks))
             return finish()
+        if only_max_pos:
+            note("*", "position slots full: no NEW symbols this cycle; top-ups of held symbols still allowed")
 
         candidates = []
         for m in self.modules:
@@ -201,8 +204,13 @@ class Agent:
         retry_min = self.s.strategy.regime_refresh_minutes_when_blocked
         for sig in candidates:
             ok, blocks = self.risk.global_checks(self.pf, equity, now)
-            if not ok and not (sig.symbol in self.pf.positions and all("max open positions" in b for b in blocks)):
-                self.log.write("no_entry", now=now, symbol=sig.symbol, reasons=blocks); break
+            if not ok:
+                if sig.symbol in self.pf.positions and all("max open positions" in b for b in blocks):
+                    pass                                   # top-up of a held symbol does not need a new slot
+                elif all("max open positions" in b for b in blocks):
+                    note(sig.symbol, "new symbol skipped: position slots full"); continue
+                else:
+                    self.log.write("no_entry", now=now, symbol=sig.symbol, reasons=blocks); break
             if now < self.retry_after.get(sig.symbol, 0):
                 note(sig.symbol, f"AI/risk said no recently; next consultation in {round((self.retry_after[sig.symbol] - now) / 60)} min")
                 continue                                   # recently rejected: do not spam the AI every loop
