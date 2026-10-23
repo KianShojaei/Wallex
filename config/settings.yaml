@@ -51,10 +51,10 @@ strategy:
       momentum_on_pct: 0.3
       momentum_off_pct: -0.3
       min_score: 0.5
-      base_size_factor: 0.5             # rule floor at score 0.6: 50% of cap = 25% of equity
-      floor_max_size_factor: 0.8        # rule floor at score 1.0: 80% of cap = 40% of equity (linear in between)
+      base_size_factor: 0.5             # rule floor at score 0.6: 50% of cap = 40% of equity
+      floor_max_size_factor: 0.8        # rule floor at score 1.0: 80% of cap = 64% of equity (linear in between)
       floor_min_score: 0.6              # below this score there is no floor; the AI advises above the floor up to the cap
-      max_position_pct: 0.50            # core may use up to 50% of equity (<= risk.max_total_exposure_pct)
+      max_position_pct: 0.80            # core may use up to 80% of equity (<= risk.max_total_exposure_pct); floor 40-64%, AI sizes the rest
       stop_loss_pct: 2.5                # tail protection only; regime exit is the normal way out
       take_profit_pct: 0                # 0 = no fixed take-profit
       trailing_pct: 0
@@ -96,7 +96,7 @@ strategy:
 
 risk:
   max_position_pct: 0.20                # default cap for modules that do not set their own
-  max_total_exposure_pct: 0.50          # never more than half the account in the market
+  max_total_exposure_pct: 0.80          # dynamic cap: at most 80% of the account in the market, 20% always TMN
   max_open_positions: 2
   stop_loss_pct: 2.0                    # defaults, overridden per module above
   take_profit_pct: 0
