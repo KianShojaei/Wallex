@@ -73,7 +73,7 @@ def test_carry_module_on_trending_usdt(settings, tmp_path):
     entries = [x for x in recs if x["kind"] == "entry"]
     assert entries and all(e["module"] == "carry" and e["symbol"] == "XAUTTMN" for e in entries)
     for e in entries:
-        assert e["risk_plan"]["notional_tmn"] <= e["equity_before"] * 0.5 + 1
+        assert e["risk_plan"]["notional_tmn"] <= e["equity_before"] * settings.risk.max_total_exposure_pct + 1
         assert e["risk_plan"]["take_profit_pct"] == 0 and e["risk_plan"]["stop_loss_pct"] == 2.5
     assert len([x for x in recs if x["kind"] == "exit"]) == len(entries)
     assert r.metrics["net_return_pct"] > 0
