@@ -112,7 +112,7 @@ def run(s, mode: str, ai_mode: str = "live", once: bool = False, mcp: bool = Fal
             prices: Dict[str, float] = {}
             recent: Dict[str, List[Dict]] = {}
             frames: Dict = {}
-            for sym in set(universe) | set(agent.pf.positions):
+            for sym in set(universe) | set(agent.pf.positions) | set(s.markets.observe):
                 m = markets.get(sym)
                 if not m:
                     continue

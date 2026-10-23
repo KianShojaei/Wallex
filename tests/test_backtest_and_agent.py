@@ -55,18 +55,21 @@ def test_analyst_threshold_and_fallback(settings, tmp_path):
 
 
 def test_carry_module_on_trending_usdt(settings, tmp_path):
-    """Synthetic USDTTMN with a steady upward drift: the carry core must go long, respect its 50% cap,
-    never hold a fixed take-profit, and end flat (realised in TMN)."""
+    """Synthetic USDTTMN with a steady upward drift (regime symbol, read-only) and a gold carrier XAUTTMN that
+    follows it: the carry core must go long the CARRIER, respect its 50% cap, hold no fixed take-profit, and end flat."""
     import numpy as np, pandas as pd
     n = 500
     idx = pd.date_range("2026-09-01", periods=n, freq="60min", tz="UTC")
     rng = np.random.default_rng(0)
-    c = 100000 * np.cumprod(1 + rng.normal(0.0004, 0.002, n))
-    df = pd.DataFrame({"open": np.r_[c[0], c[:-1]], "high": c * 1.001, "low": c * 0.999, "close": c, "volume": 1.0}, index=idx)
-    r = run_backtest(settings, ["USDTTMN"], None, None, "off", out_root=str(tmp_path / "bt"), frames={"USDTTMN": df})
+    def frame(start, drift, vol, seed):
+        r = np.random.default_rng(seed)
+        c = start * np.cumprod(1 + r.normal(drift, vol, n))
+        return pd.DataFrame({"open": np.r_[c[0], c[:-1]], "high": c * 1.001, "low": c * 0.999, "close": c, "volume": 1.0}, index=idx)
+    frames = {"USDTTMN": frame(100000, 0.0004, 0.002, 0), "XAUTTMN": frame(1_000_000_000, 0.0004, 0.004, 1)}
+    r = run_backtest(settings, ["XAUTTMN"], None, None, "off", out_root=str(tmp_path / "bt"), frames=frames)
     recs = [json.loads(l) for l in open(r.out_dir / "backtest_decisions.jsonl", encoding="utf-8")]
     entries = [x for x in recs if x["kind"] == "entry"]
-    assert entries and all(e["module"] == "carry" for e in entries)
+    assert entries and all(e["module"] == "carry" and e["symbol"] == "XAUTTMN" for e in entries)
     for e in entries:
         assert e["risk_plan"]["notional_tmn"] <= e["equity_before"] * 0.5 + 1
         assert e["risk_plan"]["take_profit_pct"] == 0 and e["risk_plan"]["stop_loss_pct"] == 2.5

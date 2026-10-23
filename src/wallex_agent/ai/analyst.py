@@ -33,7 +33,10 @@ SYSTEM = (
 # What each strategy module is trying to do: the analyst judges the candidate against this thesis.
 MODULE_BRIEFS = {
     "carry": (
-        "CURRENCY-REGIME CORE. Thesis: the Toman is weakening, so holding USDT (USDTTMN rising) earns the FX drift. "
+        "CURRENCY-REGIME CORE. Thesis: the Toman is weakening (USDT/TMN rising), so holding a USD-linked carrier earns "
+        "the FX drift. The regime is measured on USDTTMN (fields regime_*) but the TRADED asset may be a carrier such "
+        "as XAUTTMN (Tether Gold = gold/USD x USDT/TMN; fields carrier_*), because the account cannot buy USDT directly. "
+        "Judge BOTH: is the Toman regime intact, and is the carrier's own trend (gold) not hostile. "
         "Holding horizon 6h-3 days. This is a trend/continuation position, NOT a dip buy: being near the upper "
         "Bollinger band or a high RSI is EXPECTED in this regime and is not by itself a reason to reject. Reject or "
         "shrink when the regime looks exhausted or reversing: sharp parabolic spike likely to retrace, momentum fading "

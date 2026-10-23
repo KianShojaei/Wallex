@@ -50,7 +50,7 @@ def run_backtest(s, symbols: List[str], start: Optional[str], end: Optional[str]
     res = str(resolution or s.data.resolution)
     store = CandleStore(s.data.candle_cache_dir)
     data: Dict[str, pd.DataFrame] = {}
-    for sym in symbols:
+    for sym in list(dict.fromkeys(list(symbols) + [o for o in s.markets.observe if frames is None or o in frames])):
         df = frames[sym] if frames and sym in frames else store.load(sym, res)
         if start:
             df = df[df.index >= pd.Timestamp(start, tz="UTC")]

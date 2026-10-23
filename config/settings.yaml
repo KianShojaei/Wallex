@@ -14,7 +14,11 @@ markets:
   # Challenge rules: SPOT only, no leverage. Every Wallex market is tradable in the credit account EXCEPT the
   # organisers' disabled list (config/blocked_markets.yaml, enforced at load time and before every order).
   # We deliberately trade only this liquid TMN whitelist (none of them is blocked):
-  allowed: [USDTTMN, BTCTMN, ETHTMN, SOLTMN, XRPTMN, DOGETMN, TRXTMN, BNBTMN]
+  # NOTE: USDTTMN is READ (regime signal) but the challenge account rejects orders on it (verified 2026-10-23),
+  # so it is deliberately NOT in this list. XAUTTMN (Tether Gold) is the tradable carrier of the Toman regime.
+  allowed: [XAUTTMN, BTCTMN, ETHTMN, SOLTMN, XRPTMN, DOGETMN, TRXTMN, BNBTMN]
+  # symbols that are only observed, never traded
+  observe: [USDTTMN]
   blocked_file: config/blocked_markets.yaml
   min_24h_quote_volume_tmn: 2000000000  # liquidity filter on top of the allowed list
   max_spread_pct: 0.35
@@ -35,7 +39,10 @@ strategy:
     # CORE - Toman-weakening regime -> hold USDT (see docs/research.md for the evidence)
     carry:
       enabled: true
-      symbol: USDTTMN
+      symbol: XAUTTMN                   # traded carrier (0% maker fee, ~0.07% spread)
+      regime_symbol: USDTTMN            # where the Toman-weakening regime is measured (read-only market)
+      carrier_ema_hours: 48             # carrier must not be below its own 48h EMA by >0.5%
+      carrier_max_24h_drop_pct: 1.5     # ...nor have fallen >1.5% in 24h (gold shock); 2x this = crash exit
       ema_hours: 72
       momentum_hours: 24
       momentum_on_pct: 0.3

@@ -21,6 +21,7 @@ class ChallengeCfg(BaseModel):
 
 class MarketsCfg(BaseModel):
     allowed: List[str]
+    observe: List[str] = Field(default_factory=list)       # data-only symbols (never traded)
     blocked_file: str = "config/blocked_markets.yaml"   # organisers' list of markets disabled in the credit account
     blocked: List[str] = Field(default_factory=list)      # filled from blocked_file at load time (symbols without '/')
     min_24h_quote_volume_tmn: float = 0

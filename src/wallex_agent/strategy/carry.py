@@ -32,7 +32,14 @@ class CarryStrategy(StrategyModule):
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
-        self.symbol = cfg.get("symbol", "USDTTMN")
+        # `symbol` is what we TRADE; `regime_symbol` is where the Toman-weakening regime is MEASURED.
+        # The challenge account cannot place orders on USDTTMN (verified live 2026-10-23), but USDTTMN prices are
+        # still readable, so the regime is measured on USDTTMN and expressed through a tradable carrier such as
+        # XAUTTMN (Tether Gold: gold/USD x USDT/TMN, 0% maker fee) whose own trend must not be hostile.
+        self.symbol = cfg.get("symbol", "XAUTTMN")
+        self.regime_symbol = cfg.get("regime_symbol", "USDTTMN")
+        self.carrier_ema = int(cfg.get("carrier_ema_hours", 48))
+        self.carrier_max_drop_pct = float(cfg.get("carrier_max_24h_drop_pct", 1.5))
         self.ema_n = int(cfg.get("ema_hours", 72))
         self.mom_h = int(cfg.get("momentum_hours", 24))
         self.mom_on = float(cfg.get("momentum_on_pct", 0.3))
@@ -42,8 +49,22 @@ class CarryStrategy(StrategyModule):
     def symbols(self, universe):
         return [self.symbol] if self.symbol in universe else []
 
-    def _state(self, ctx: Context):
+    def _carrier_state(self, ctx: Context):
+        """Own-trend check of the traded carrier (skip when the carrier is the regime symbol itself)."""
+        if self.symbol == self.regime_symbol:
+            return {"ok": True, "note": "carrier = regime symbol"}
         df = ctx.frames.get(self.symbol)
+        if df is None or len(df) < self.carrier_ema + 25:
+            return {"ok": False, "note": f"not enough {self.symbol} history"}
+        c = df["close"]
+        e = float(ema(c, self.carrier_ema).iloc[-1]); px = float(c.iloc[-1])
+        r24 = float((c.iloc[-1] / c.iloc[-25] - 1) * 100)
+        ok = px >= e * 0.995 and r24 > -self.carrier_max_drop_pct
+        return {"ok": ok, "px": px, "ema": e, "r24": r24,
+                "note": f"{self.symbol} close {px:,.0f} vs EMA{self.carrier_ema} {e:,.0f}, 24h {r24:+.2f}%"}
+
+    def _state(self, ctx: Context):
+        df = ctx.frames.get(self.regime_symbol)
         if df is None or len(df) < self.ema_n + 5:
             return None
         c = df["close"]
@@ -61,8 +82,13 @@ class CarryStrategy(StrategyModule):
         if st is None or self.symbol not in ctx.snapshots:
             return []
         reasons, vetoes = [], []
+        car = self._carrier_state(ctx)
+        if not car["ok"]:
+            vetoes.append(f"carrier trend hostile: {car['note']}")
+        elif self.symbol != self.regime_symbol:
+            reasons.append(f"carrier ok: {car['note']}")
         if not st["regime_up"]:
-            vetoes.append(f"TMN not weakening: close {st['px']:,.0f} <= EMA{self.ema_n} {st['ema']:,.0f} and 24h {st['r24']:+.2f}% <= {self.mom_on}%")
+            vetoes.append(f"TMN not weakening ({self.regime_symbol}): close {st['px']:,.0f} <= EMA{self.ema_n} {st['ema']:,.0f} and 24h {st['r24']:+.2f}% <= {self.mom_on}%")
         else:
             if st["px"] > st["ema"]:
                 reasons.append(f"USDT/TMN above EMA{self.ema_n} by {st['dist_pct']:+.2f}%")
@@ -77,7 +103,9 @@ class CarryStrategy(StrategyModule):
         if not vetoes and score < self.min_score:
             vetoes.append(f"carry score {score:.2f} < {self.min_score}")
         snap = ctx.snapshots[self.symbol].to_dict()
-        snap.update({f"carry_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in st.items()})
+        snap.update({f"regime_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in st.items()})
+        snap.update({f"carrier_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in car.items() if k != "note"})
+        snap["regime_symbol"] = self.regime_symbol
         return [Signal(symbol=self.symbol, side="BUY", score=round(score, 4), module=self.name, reasons=reasons,
                        vetoes=vetoes, snapshot=snap,
                        max_position_pct=self.cfg.get("max_position_pct"), stop_loss_pct=self.cfg.get("stop_loss_pct", 2.5),
@@ -89,5 +117,9 @@ class CarryStrategy(StrategyModule):
             return None
         st = self._state(ctx)
         if st and st["regime_off"]:
-            return f"carry regime off: close {st['px']:,.0f} < EMA{self.ema_n} {st['ema']:,.0f} and 24h {st['r24']:+.2f}% < {self.mom_off}%"
+            return f"carry regime off ({self.regime_symbol}): close {st['px']:,.0f} < EMA{self.ema_n} {st['ema']:,.0f} and 24h {st['r24']:+.2f}% < {self.mom_off}%"
+        if self.symbol != self.regime_symbol:
+            car = self._carrier_state(ctx)
+            if car.get("px") and car["r24"] < -2 * self.carrier_max_drop_pct:
+                return f"carrier crash exit: {car['note']}"
         return None
