@@ -79,6 +79,9 @@ def _compact(r: dict) -> dict:
 
 
 def make_handler(state: DashboardState, token: str):
+    from wallex_agent.dashboard.mcp import MCPHandler
+    mcp = MCPHandler(state)
+
     class H(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # quiet
             log.debug("dash %s", fmt % args)
@@ -87,6 +90,7 @@ def make_handler(state: DashboardState, token: str):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -96,8 +100,34 @@ def make_handler(state: DashboardState, token: str):
                 return True
             return q.get("token", [None])[0] == token or self.headers.get("X-Token") == token
 
+        def do_POST(self):
+            u = urlparse(self.path); q = parse_qs(u.query)
+            if u.path != "/mcp":
+                return self._send(404, b"not found", "text/plain")
+            if not self._authed(q):
+                return self._send(401, json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32001, "message": "unauthorized"}}).encode(), "application/json")
+            n = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(n) if n else b""
+            code, out = mcp.handle(body)
+            if code == 202:
+                self.send_response(202); self.send_header("Content-Length", "0"); self.end_headers(); return
+            return self._send(code, out, "application/json; charset=utf-8")
+
+        def do_DELETE(self):
+            u = urlparse(self.path)
+            return self._send(200 if u.path == "/mcp" else 404, b"", "text/plain")
+
+        def do_OPTIONS(self):
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Token, Mcp-Session-Id, Mcp-Protocol-Version, Authorization")
+            self.end_headers()
+
         def do_GET(self):
             u = urlparse(self.path); q = parse_qs(u.query)
+            if u.path == "/mcp":
+                return self._send(405, b"MCP: use POST (stateless Streamable HTTP, no SSE stream)", "text/plain")
             if u.path == "/healthz":
                 st = state.status(); fresh = st.get("updated_at") and time.time() - float(st["updated_at"]) < 300
                 return self._send(200 if fresh else 503, (b"ok" if fresh else b"stale"), "text/plain")

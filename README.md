@@ -186,6 +186,17 @@ liara deploy --app <APP> --port 8000
 ```
 بعد از دیپلوی: `https://<APP>.liara.run/?token=<رمز>`. لاگ تصمیم و وضعیت در دیسک `data` می‌ماند و با ری‌استارت از بین نمی‌رود؛ برای تحویل، از پنل لیارا یا با `liara shell` فایل‌های `/app/data/logs/decisions/*.jsonl` را بردارید.
 
+### اتصال Claude به ایجنت (MCP)
+همان سرویس یک **سرور MCP فقط‌خواندنی** روی مسیر `/mcp` دارد (Streamable HTTP، بدون نیاز به بسته‌ی اضافی؛ `src/wallex_agent/dashboard/mcp.py`). ابزارها: `get_status`، `get_positions`، `get_markets`، `get_regimes`، `get_decisions`، `get_trades`، `get_risk_limits`، `get_equity_curve`، `get_strategy_description`. هیچ ابزاری سفارش نمی‌زند؛ مدل فقط می‌تواند بررسی و توضیح دهد.
+
+```bash
+# Claude Code
+claude mcp add --transport http wallex-agent "https://<APP>.liara.run/mcp?token=<TOKEN>"
+# Claude Desktop / claude.ai → Settings → Connectors → Add custom connector → URL:
+#   https://<APP>.liara.run/mcp?token=<TOKEN>
+```
+بعد می‌توانید از Claude بپرسید «وضعیت ایجنت چیست؟»، «چرا آخرین معامله را فروخت؟» یا «رژیم فعلی را توضیح بده». این برای داوران هم راه سریعی برای بازرسی لاگ تصمیم است.
+
 ### تست‌های واحد
 ```bash
 pytest -q        # ۱۳ تست: اندیکاتورها، سیگنال‌ها، ریسک (سایز/سقف‌ها/خروج‌ها/Drawdown)، بک‌تست end-to-end، تکرارپذیری، فالبک AI
