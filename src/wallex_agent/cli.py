@@ -121,6 +121,43 @@ def cmd_liquidate(s, a):
     console.print(agent.pf.summary(prices))
 
 
+def cmd_smoke_order(s, a):
+    """Place ONE small real order and unwind it, printing raw exchange responses, to validate the live order path."""
+    import json as _json
+    from wallex_agent.execution.broker import LiveBroker
+    from wallex_agent.wallex.client import WallexClient, WallexError
+    if not s.wallex_api_key:
+        sys.exit("needs WALLEX_API_KEY")
+    sym = a.symbol
+    if s.markets.is_blocked(sym) or sym not in s.markets.allowed:
+        sys.exit(f"{sym} is not an allowed challenge market")
+    c = WallexClient(s.wallex_base_url, s.wallex_api_key)
+    m = c.markets()[sym]
+    console.print(f"market {sym}: bid={m.bid:,.0f} ask={m.ask:,.0f} qty_precision={m.qty_precision} price_precision={m.price_precision} min_qty={m.min_qty} min_notional={m.min_notional}")
+    console.print("raw market info:", _json.dumps({k: v for k, v in m.raw.items() if k != "stats"}, ensure_ascii=False)[:600])
+    if not a.yes:
+        if input(f"place a REAL {a.notional:,.0f} TMN {sym} buy+sell round trip (style={a.style})? type YES: ").strip() != "YES":
+            sys.exit("aborted")
+    br = LiveBroker(c, s.risk.fee_pct, "LIMIT", s.execution.limit_offset_pct, a.timeout, style=a.style)
+    t0 = time.time()
+    buy = br.buy(sym, a.notional, m, m.ask)
+    console.print(f"[bold]BUY[/] ok={buy.ok} status={buy.status} qty={buy.qty} price={buy.price} notional={buy.notional_tmn:,.0f} err={buy.error!r} ({time.time()-t0:.1f}s)")
+    console.print("raw order response:", _json.dumps(buy.raw, ensure_ascii=False, default=str)[:1200])
+    try:
+        console.print("order lookup:", _json.dumps(c.order(buy.order_id), ensure_ascii=False, default=str)[:1200])
+    except WallexError as e:
+        console.print(f"order lookup failed: {e}")
+    if buy.ok and buy.qty > 0:
+        m = c.markets()[sym]
+        t1 = time.time()
+        sell = br.sell(sym, buy.qty, m, m.bid)
+        console.print(f"[bold]SELL[/] ok={sell.ok} status={sell.status} qty={sell.qty} price={sell.price} notional={sell.notional_tmn:,.0f} err={sell.error!r} ({time.time()-t1:.1f}s)")
+        console.print("raw sell response:", _json.dumps(sell.raw, ensure_ascii=False, default=str)[:1200])
+        console.print(f"round-trip pnl incl. fees ≈ {sell.notional_tmn - sell.fee_tmn - buy.notional_tmn - buy.fee_tmn:,.0f} TMN")
+    console.print("balances:", {k: v for k, v in c.balances().items() if v["value"] > 0})
+    console.print("open orders:", c.open_orders(sym))
+
+
 def cmd_report(s, a):
     from wallex_agent.backtest.report import summarize_logs
     summarize_logs(Path(a.path or s.execution.decision_log_dir), console)
@@ -137,6 +174,9 @@ def main(argv=None):
     st = sub.add_parser("status"); st.add_argument("--mode", default="shadow"); st.set_defaults(fn=cmd_status)
     lq = sub.add_parser("liquidate"); lq.add_argument("--mode", default="live"); lq.set_defaults(fn=cmd_liquidate)
     rp = sub.add_parser("report"); rp.add_argument("--path"); rp.set_defaults(fn=cmd_report)
+    so = sub.add_parser("smoke-order", help="one tiny real buy+sell to validate the live order path")
+    so.add_argument("--symbol", default="USDTTMN"); so.add_argument("--notional", type=float, default=300000); so.add_argument("--style", choices=["maker", "taker"], default="taker")
+    so.add_argument("--timeout", type=int, default=60); so.add_argument("-y", "--yes", action="store_true"); so.set_defaults(fn=cmd_smoke_order)
     a = p.parse_args(argv)
     _logging(a.verbose)
     s = load_settings(a.config)
