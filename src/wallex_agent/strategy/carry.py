@@ -51,14 +51,58 @@ class CarryStrategy(StrategyModule):
         self.base_size_factor = float(cfg.get("base_size_factor", 0.5))
         self.floor_min_score = float(cfg.get("floor_min_score", 0.6))
         self.floor_max_size_factor = float(cfg.get("floor_max_size_factor", 0.8))
+        # Dynamic weights: tilt the basket toward carriers whose OWN USD-terms trend is strongest.
+        # weight_i = base_i x clip(1 + tilt_strength x (rel_i / tilt_scale_pct), tilt_min, tilt_max), renormalised.
+        # rel_i = carrier's 72h return in USD terms minus the basket average -> zero-sum relative strength.
+        self.dynamic = bool(cfg.get("dynamic_weights", True))
+        self.tilt_strength = float(cfg.get("tilt_strength", 1.0))
+        self.tilt_scale_pct = float(cfg.get("tilt_scale_pct", 3.0))
+        self.tilt_min, self.tilt_max = [float(x) for x in cfg.get("tilt_bounds", [0.5, 1.5])]
+        self.tilt_hours = int(cfg.get("tilt_hours", 72))
+        self.weights: Dict[str, float] = dict(self.carriers)      # current (possibly tilted) weights
 
     # ------------------------------------------------------------------ helpers
     def symbols(self, universe):
         return [s for s in self.carriers if s in universe]
 
     def position_cap_pct(self, symbol: str) -> Optional[float]:
-        w = self.carriers.get(symbol)
+        w = self.weights.get(symbol)
         return self.module_cap * w if w else None
+
+    def _usd_return(self, symbol: str, ctx: Context) -> Optional[float]:
+        """Carrier's own return over tilt_hours in USD terms (price / USDTTMN), in %."""
+        df = ctx.frames.get(symbol); u = ctx.frames.get(self.regime_symbol)
+        if df is None or u is None or len(df) <= self.tilt_hours:
+            return None
+        c = df["close"]; uc = u["close"].reindex(c.index).ffill()
+        usd = (c / uc).dropna()
+        if len(usd) <= self.tilt_hours:
+            return None
+        return float((usd.iloc[-1] / usd.iloc[-1 - self.tilt_hours] - 1) * 100)
+
+    def update_weights(self, ctx: Context) -> Dict[str, Dict[str, float]]:
+        """Recompute basket weights from relative USD-terms strength. Returns per-carrier diagnostics."""
+        diag: Dict[str, Dict[str, float]] = {}
+        if not self.dynamic:
+            self.weights = dict(self.carriers)
+            return diag
+        rets = {s: self._usd_return(s, ctx) for s in self.carriers}
+        known = {s: r for s, r in rets.items() if r is not None}
+        if len(known) < 2:
+            self.weights = dict(self.carriers)
+            return diag
+        avg = sum(known.values()) / len(known)
+        raw = {}
+        for s, base in self.carriers.items():
+            rel = (known.get(s, avg) - avg)
+            mult = _clip(1 + self.tilt_strength * rel / self.tilt_scale_pct, self.tilt_min, self.tilt_max)
+            raw[s] = base * mult
+            diag[s] = {"usd_ret_pct": round(known.get(s, avg), 3), "rel_pct": round(rel, 3), "mult": round(mult, 3)}
+        tot = sum(raw.values()) or 1.0
+        self.weights = {s: v / tot for s, v in raw.items()}
+        for s in diag:
+            diag[s]["weight"] = round(self.weights[s], 3)
+        return diag
 
     def _carrier_state(self, symbol: str, ctx: Context):
         if symbol == self.regime_symbol:
@@ -109,7 +153,8 @@ class CarryStrategy(StrategyModule):
             if st["r72"] > 0:
                 regime_reasons.append(f"72h momentum {st['r72']:+.2f}%")
         base_score = self._score(st) if not regime_vetoes else 0.0
-        for sym, w in self.carriers.items():
+        tilt = self.update_weights(ctx)
+        for sym, w in self.weights.items():
             if sym not in ctx.snapshots:
                 continue
             reasons, vetoes = list(regime_reasons), list(regime_vetoes)
@@ -131,7 +176,11 @@ class CarryStrategy(StrategyModule):
             snap.update({f"regime_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in st.items()})
             snap.update({f"carrier_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in car.items() if k != "note"})
             snap["regime_symbol"] = self.regime_symbol
-            snap["basket_weight"] = w
+            snap["basket_weight"] = round(w, 3)
+            snap["basket_base_weight"] = self.carriers[sym]
+            if sym in tilt:
+                snap["basket_tilt"] = tilt[sym]
+                reasons.append(f"dynamic weight {w:.0%} (base {self.carriers[sym]:.0%}): USD-terms {self.tilt_hours}h return {tilt[sym]['usd_ret_pct']:+.2f}% vs basket avg {tilt[sym]['rel_pct']:+.2f}%")
             out.append(Signal(symbol=sym, side="BUY", score=round(score, 4), module=self.name, reasons=reasons, vetoes=vetoes,
                               snapshot=snap, floor_size_factor=floor, max_position_pct=cap,
                               stop_loss_pct=self.cfg.get("stop_loss_pct", 2.5), take_profit_pct=self.cfg.get("take_profit_pct", 0),

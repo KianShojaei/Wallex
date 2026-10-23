@@ -49,6 +49,11 @@ strategy:
         BTCTMN: 0.3                     # -> 24% of equity
         ETHTMN: 0.2                     # -> 16% of equity
       regime_symbol: USDTTMN            # where the Toman-weakening regime is measured (read-only market)
+      dynamic_weights: true             # tilt weights toward the carrier with the strongest own USD-terms 72h trend
+      tilt_strength: 1.0                # multiplier = clip(1 + strength * rel_return / scale, bounds)
+      tilt_scale_pct: 3.0               # a carrier 3% stronger than the basket average gets 2x base weight (before bounds)
+      tilt_bounds: [0.5, 1.5]           # never below half nor above 1.5x its base weight
+      tilt_hours: 72
       carrier_ema_hours: 48             # carrier must not be below its own 48h EMA by >0.5%
       carrier_max_24h_drop_pct: 1.5     # ...nor have fallen >1.5% in 24h (gold shock); 2x this = crash exit
       ema_hours: 72

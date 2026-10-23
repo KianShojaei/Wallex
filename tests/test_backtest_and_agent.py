@@ -87,6 +87,7 @@ def test_carry_basket_and_rebalance(settings, tmp_path):
     from wallex_agent.strategy.carry import CarryStrategy
     from wallex_agent.strategy.base import Context
     from wallex_agent.data.features import compute_indicators, snapshot_from
+    settings.strategy.modules["carry"]["dynamic_weights"] = False       # static weights for this test
     cs = CarryStrategy(settings.strategy.modules["carry"])
     assert abs(cs.position_cap_pct("XAUTTMN") - 0.40) < 1e-9 and abs(cs.position_cap_pct("BTCTMN") - 0.24) < 1e-9
     n = 300; idx = pd.date_range("2026-09-01", periods=n, freq="60min", tz="UTC")
@@ -119,3 +120,22 @@ def test_carry_basket_and_rebalance(settings, tmp_path):
     assert 0.38 <= gold_share <= 0.41, gold_share            # trimmed from 73% to the 40% basket cap
     recs = [json.loads(l) for l in open(agent.log.path, encoding="utf-8")]
     assert any(r["kind"] == "rebalance" for r in recs)
+
+
+def test_dynamic_weights_tilt_toward_strong_carrier(settings):
+    import numpy as np, pandas as pd
+    from wallex_agent.strategy.carry import CarryStrategy
+    from wallex_agent.strategy.base import Context
+    cs = CarryStrategy(settings.strategy.modules["carry"])
+    n = 200; idx = pd.date_range("2026-09-01", periods=n, freq="60min", tz="UTC")
+    def frame(start, drift):
+        c = start * np.cumprod(np.full(n, 1 + drift))
+        return pd.DataFrame({"open": c, "high": c, "low": c, "close": c, "volume": 1.0}, index=idx)
+    frames = {"USDTTMN": frame(1e5, 0.0), "XAUTTMN": frame(1e9, 0.0), "BTCTMN": frame(2e10, 0.0006), "ETHTMN": frame(6e8, -0.0006)}
+    ctx = Context(now=idx[-1].timestamp(), snapshots={}, frames=frames, prices={})
+    cs.update_weights(ctx)
+    w = cs.weights
+    assert abs(sum(w.values()) - 1) < 1e-9
+    assert w["BTCTMN"] > cs.carriers["BTCTMN"] and w["ETHTMN"] < cs.carriers["ETHTMN"]      # strong up, weak down
+    assert w["BTCTMN"] <= cs.carriers["BTCTMN"] * 1.5 / sum(w.values()) + 1e-9
+    assert all(v > 0 for v in w.values())
