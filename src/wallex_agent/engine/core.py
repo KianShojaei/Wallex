@@ -50,8 +50,10 @@ class Agent:
         if not self.analyst or not self.s.strategy.ai_enabled:
             return None
         key = f"{module}:{sym}"
-        if key in self.regimes and now - self.regime_ts.get(key, 0) < self.s.strategy.regime_refresh_minutes * 60:
-            return self.regimes[key]
+        if key in self.regimes:
+            ttl = self.s.strategy.regime_refresh_minutes if self.regimes[key].allow_entries else self.s.strategy.regime_refresh_minutes_when_blocked
+            if now - self.regime_ts.get(key, 0) < ttl * 60:
+                return self.regimes[key]
         snapd = {**snap.to_dict(), **(extra or {})}
         rg = self.analyst.regime(sym, snapd, recent, mcp_ctx, module=module)
         if rg is not None:
@@ -116,10 +118,14 @@ class Agent:
             snap = snapshots[sig.symbol]
             extra = {k: v for k, v in (sig.snapshot or {}).items() if k not in snap.to_dict()}   # module-specific numbers (e.g. carry_r24)
             regime = self._refresh_regime(sig.symbol, snap, recent_bars.get(sig.symbol, []), now, mcp_ctx.get(sig.symbol), sig.module, extra)
-            if regime and not regime.allow_entries:
+            floor = float(getattr(sig, "floor_size_factor", 0.0) or 0.0)
+            if regime and not regime.allow_entries and floor <= 0:
                 self.log.write("reject", now=now, symbol=sig.symbol, stage="regime", signal=sig.to_dict(),
                                regime=regime.model_dump(), reason="AI regime disallows entries")
                 continue
+            if regime and not regime.allow_entries and floor > 0:
+                self.log.write("ai_overruled", now=now, symbol=sig.symbol, stage="regime", regime=regime.model_dump(),
+                               reason=f"AI regime disallows entries but rule floor {floor:.0%} applies (score {sig.score:.2f})")
             if self.analyst and self.s.strategy.ai_enabled:
                 rd = self._risk_defaults()
                 for k in ("max_position_pct", "stop_loss_pct", "take_profit_pct"):
@@ -134,14 +140,21 @@ class Agent:
                 size_f, ai_sl, ai_tp, rationale, ddump = 1.0, None, None, "[rule-only] AI disabled", None
             else:
                 ddump = decision.model_dump()
-                if decision.action == "reject":
+                if decision.action == "reject" and floor <= 0:
                     self.log.write("reject", now=now, symbol=sig.symbol, stage="ai", signal=sig.to_dict(),
                                    regime=regime.model_dump() if regime else None, decision=ddump, ai_used=ai_used)
                     continue
-                size_f, ai_sl, ai_tp, rationale = decision.size_factor, decision.stop_loss_pct, decision.take_profit_pct, decision.rationale
-            overrides = {k: getattr(sig, k) for k in ("max_position_pct", "stop_loss_pct", "take_profit_pct", "trailing_pct", "max_holding_minutes", "allow_top_up")}
+                if decision.action == "reject":
+                    self.log.write("ai_overruled", now=now, symbol=sig.symbol, stage="ai", decision=ddump,
+                                   reason=f"AI rejected but rule floor {floor:.0%} applies (score {sig.score:.2f})")
+                    size_f, ai_sl, ai_tp = 0.0, decision.stop_loss_pct, None
+                    rationale = f"[rule floor] {decision.rationale}"
+                else:
+                    size_f, ai_sl, ai_tp, rationale = decision.size_factor, decision.stop_loss_pct, decision.take_profit_pct, decision.rationale
+            overrides = {k: getattr(sig, k) for k in ("max_position_pct", "stop_loss_pct", "take_profit_pct", "trailing_pct", "max_holding_minutes", "allow_top_up", "floor_size_factor")}
+            regime_sf = 0.0 if (regime and not regime.allow_entries) else (regime.size_factor if regime else 1.0)
             plan, notes = self.risk.plan_entry(sig.symbol, self.pf, equity, prices, size_f, ai_sl, ai_tp, snap.atr_pct,
-                                               regime.size_factor if regime else 1.0, now, overrides)
+                                               regime_sf, now, overrides)
             if plan is None:
                 self.log.write("reject", now=now, symbol=sig.symbol, stage="risk", signal=sig.to_dict(), decision=ddump, reasons=notes)
                 continue

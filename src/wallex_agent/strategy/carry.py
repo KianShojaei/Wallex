@@ -45,6 +45,10 @@ class CarryStrategy(StrategyModule):
         self.mom_on = float(cfg.get("momentum_on_pct", 0.3))
         self.mom_off = float(cfg.get("momentum_off_pct", -0.3))
         self.min_score = float(cfg.get("min_score", 0.5))
+        # Rule-layer floor: when the FX regime is clearly on and the carrier guard passes, always hold at least
+        # base_size_factor x cap (research: passive exposure beat every timing filter). The AI sizes the rest.
+        self.base_size_factor = float(cfg.get("base_size_factor", 0.5))
+        self.floor_min_score = float(cfg.get("floor_min_score", 0.6))
 
     def symbols(self, universe):
         return [self.symbol] if self.symbol in universe else []
@@ -106,8 +110,11 @@ class CarryStrategy(StrategyModule):
         snap.update({f"regime_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in st.items()})
         snap.update({f"carrier_{k}": (round(v, 4) if isinstance(v, float) else v) for k, v in car.items() if k != "note"})
         snap["regime_symbol"] = self.regime_symbol
+        floor = self.base_size_factor if (not vetoes and score >= self.floor_min_score) else 0.0
+        if floor:
+            reasons.append(f"rule floor active: score {score:.2f} >= {self.floor_min_score} -> at least {floor:.0%} of module cap")
         return [Signal(symbol=self.symbol, side="BUY", score=round(score, 4), module=self.name, reasons=reasons,
-                       vetoes=vetoes, snapshot=snap,
+                       vetoes=vetoes, snapshot=snap, floor_size_factor=floor,
                        max_position_pct=self.cfg.get("max_position_pct"), stop_loss_pct=self.cfg.get("stop_loss_pct", 2.5),
                        take_profit_pct=self.cfg.get("take_profit_pct", 0), trailing_pct=self.cfg.get("trailing_pct", 0),
                        max_holding_minutes=self.cfg.get("max_holding_minutes", 0), allow_top_up=bool(self.cfg.get("allow_top_up", False)))]

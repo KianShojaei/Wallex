@@ -55,6 +55,7 @@ class StrategyCfg(BaseModel):
     ai_enabled: bool = True
     ai_min_confidence: float = 0.6
     regime_refresh_minutes: int = 60
+    regime_refresh_minutes_when_blocked: int = 15
 
 
 class RiskCfg(BaseModel):

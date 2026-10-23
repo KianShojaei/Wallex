@@ -26,6 +26,7 @@ class Signal:
     trailing_pct: Optional[float] = None
     max_holding_minutes: Optional[int] = None
     allow_top_up: bool = False
+    floor_size_factor: float = 0.0     # minimum size the risk engine takes when the rule layer is confident (AI advises above it)
 
     @property
     def is_candidate(self) -> bool:

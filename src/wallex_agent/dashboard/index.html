@@ -36,7 +36,7 @@
   td.num{direction:ltr;text-align:right;font-variant-numeric:tabular-nums} tbody tr:hover td{background:var(--card2)}
   .badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--line);color:var(--muted);background:var(--card2)}
   .badge.entry,.badge.top_up{color:var(--green);border-color:rgba(34,197,94,.45)} .badge.exit{color:var(--blue);border-color:rgba(59,130,246,.45)}
-  .badge.reject,.badge.no_entry,.badge.scan{color:var(--amber);border-color:rgba(245,158,11,.45)} .badge.regime{color:var(--violet);border-color:rgba(139,92,246,.45)}
+  .badge.reject,.badge.no_entry,.badge.scan{color:var(--amber);border-color:rgba(245,158,11,.45)} .badge.regime,.badge.ai_overruled{color:var(--violet);border-color:rgba(139,92,246,.45)}
   .badge.error,.badge.kill_switch,.badge.exit_failed,.badge.entry_failed{color:var(--red);border-color:rgba(239,68,68,.5)}
   .small{font-size:12px;color:var(--muted)} .ltr{direction:ltr;text-align:left} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
   svg{width:100%;height:150px;display:block} .scroll{max-height:520px;overflow:auto;border-radius:10px}
@@ -145,6 +145,7 @@ async function load(){
       if(d.kind==="scan")txt=`<span class="small">score ${d.score}</span> <span class="ltr">${(d.vetoes||[]).join("; ")}</span>`;
       if(d.kind==="regime")txt=`<span class="badge regime">${d.regime?.regime}</span> اطمینان ${d.regime?.confidence} · ${d.regime?.allow_entries?"ورود ✅":"ورود ⛔"} · <span class="ltr">${d.regime?.summary||""}</span>`;
       if(d.kind==="no_entry")txt=(d.reasons||[]).join("; ");
+      if(d.kind==="ai_overruled")txt=`<span class="ltr">${d.reason}</span>`;
       if(d.ai&&d.kind!=="reject")txt+=` <span class="small">[AI ${d.ai.action} · ${d.ai.confidence}]</span>`;
       return `<tr><td class="num small mono">${d.ts?d.ts.replace("T"," ").replace("Z",""):""}</td><td><span class="badge ${d.kind}">${d.kind}</span></td><td>${d.symbol||""}</td><td class="small" style="text-align:right">${txt}</td></tr>`}).join(""):`<tr><td colspan="4" class="empty">رکوردی نیست</td></tr>`;
   }catch(e){document.getElementById("meta").textContent="خطا در خواندن وضعیت: "+e}

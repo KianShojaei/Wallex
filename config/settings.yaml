@@ -37,6 +37,7 @@ strategy:
   ai_enabled: true
   ai_min_confidence: 0.60
   regime_refresh_minutes: 60
+  regime_refresh_minutes_when_blocked: 15   # re-ask the AI sooner while it is saying "no"
   modules:
     # CORE - Toman-weakening regime -> hold USDT (see docs/research.md for the evidence)
     carry:
@@ -50,6 +51,8 @@ strategy:
       momentum_on_pct: 0.3
       momentum_off_pct: -0.3
       min_score: 0.5
+      base_size_factor: 0.5             # rule floor: >=25% of equity whenever the FX regime is clearly on (score >= floor_min_score)
+      floor_min_score: 0.6              #   ...the AI advises on the remaining 25-50%; it cannot veto the floor
       max_position_pct: 0.50            # core may use up to 50% of equity (<= risk.max_total_exposure_pct)
       stop_loss_pct: 2.5                # tail protection only; regime exit is the normal way out
       take_profit_pct: 0                # 0 = no fixed take-profit

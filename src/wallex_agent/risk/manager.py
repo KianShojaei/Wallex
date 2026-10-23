@@ -87,8 +87,12 @@ class RiskManager:
         vol_factor = min(1.0, 1.0 / max(atr_pct, 0.5))
         # the per-candidate AI decision already saw the regime, so take the stricter of the two instead of compounding them
         ai_f = max(0.0, min(1.0, min(ai_size_factor, regime_size_factor)))
+        floor = float(ov.get("floor_size_factor") or 0.0)
+        if floor > ai_f:
+            notes.append(f"AI size {ai_f:.2f} raised to rule floor {floor:.2f}")
+            ai_f = floor
         size_factor = ai_f * vol_factor
-        notes.append(f"size_factor = min(ai {ai_size_factor:.2f}, regime {regime_size_factor:.2f}) x vol {vol_factor:.2f} = {size_factor:.2f}")
+        notes.append(f"size_factor = max(min(ai {ai_size_factor:.2f}, regime {regime_size_factor:.2f}), floor {floor:.2f}) x vol {vol_factor:.2f} = {size_factor:.2f}")
         cap_pct = self.cfg.max_position_pct
         if ov.get("max_position_pct"):
             cap_pct = min(float(ov["max_position_pct"]), self.cfg.max_total_exposure_pct)   # a module may raise its own cap up to the exposure cap
