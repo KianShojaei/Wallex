@@ -134,6 +134,16 @@ def load_settings(config_path: str | os.PathLike | None = None, env_file: str = 
         run_mode=os.getenv("RUN_MODE", "shadow"),
     )
     st = Settings(**raw)
+    # Containers (Liara/Docker) mount one persistent disk: DATA_DIR relocates every writable path onto it.
+    data_dir = os.getenv("DATA_DIR")
+    if data_dir:
+        d = Path(data_dir)
+        st.execution.state_dir = str(d / "state")
+        st.execution.decision_log_dir = str(d / "logs" / "decisions")
+        st.execution.ai_cache_dir = str(d / "logs" / "ai_cache")
+        st.data.candle_cache_dir = str(d / "candles")
+        for sub in (st.execution.state_dir, st.execution.decision_log_dir, st.execution.ai_cache_dir, st.data.candle_cache_dir):
+            Path(sub).mkdir(parents=True, exist_ok=True)
     bf = Path(st.markets.blocked_file)
     if not bf.is_absolute():
         bf = path.parent.parent / bf if (path.parent.parent / bf).exists() else bf

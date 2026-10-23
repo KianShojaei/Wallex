@@ -90,3 +90,11 @@ def test_blocked_markets_loaded_and_enforced(settings):
     assert not settings.markets.is_blocked("USDTTMN") and not settings.markets.is_blocked("BTCUSDT")
     for sym in settings.markets.allowed:
         assert not settings.markets.is_blocked(sym)
+
+
+def test_data_dir_relocates_writable_paths(tmp_path, monkeypatch):
+    from wallex_agent.config import load_settings
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "disk"))
+    st = load_settings("config/settings.yaml", env_file="/nonexistent.env")
+    assert st.execution.state_dir.startswith(str(tmp_path / "disk"))
+    assert (tmp_path / "disk" / "logs" / "decisions").is_dir() and (tmp_path / "disk" / "candles").is_dir()
