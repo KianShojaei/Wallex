@@ -61,3 +61,7 @@ class StrategyModule:
 
     def exit_hint(self, symbol: str, ctx: Context) -> Optional[str]:
         return None
+
+    def position_cap_pct(self, symbol: str) -> Optional[float]:
+        """Per-symbol cap (fraction of equity) if the module defines one; used to trim oversized positions."""
+        return None

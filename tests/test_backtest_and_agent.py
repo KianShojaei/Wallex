@@ -79,3 +79,43 @@ def test_carry_module_on_trending_usdt(settings, tmp_path):
     # behaviour, not luck: the rule floor must put at least 40% of equity to work on a strong regime
     assert max(e["risk_plan"]["notional_tmn"] / e["equity_before"] for e in entries) >= 0.39
     assert r.metrics["trades"] == len(entries) and r.metrics["max_drawdown_pct"] < 6.0
+
+
+def test_carry_basket_and_rebalance(settings, tmp_path):
+    """Three carriers share the module cap by weight; an oversized position gets trimmed to its basket cap."""
+    import numpy as np, pandas as pd
+    from wallex_agent.strategy.carry import CarryStrategy
+    from wallex_agent.strategy.base import Context
+    from wallex_agent.data.features import compute_indicators, snapshot_from
+    cs = CarryStrategy(settings.strategy.modules["carry"])
+    assert abs(cs.position_cap_pct("XAUTTMN") - 0.40) < 1e-9 and abs(cs.position_cap_pct("BTCTMN") - 0.24) < 1e-9
+    n = 300; idx = pd.date_range("2026-09-01", periods=n, freq="60min", tz="UTC")
+    def frame(start, drift, vol, seed):
+        r = np.random.default_rng(seed); c = start * np.cumprod(1 + r.normal(drift, vol, n))
+        return compute_indicators(pd.DataFrame({"open": np.r_[c[0], c[:-1]], "high": c * 1.001, "low": c * 0.999, "close": c, "volume": 1.0}, index=idx), settings.strategy)
+    frames = {"USDTTMN": frame(100000, 0.0006, 0.001, 0), "XAUTTMN": frame(1e9, 0.0005, 0.003, 1), "BTCTMN": frame(2e10, 0.0005, 0.004, 2), "ETHTMN": frame(6e8, 0.0005, 0.004, 3)}
+    snaps = {k: snapshot_from(v, k, spread_pct=0.1) for k, v in frames.items() if k != "USDTTMN"}
+    ctx = Context(now=idx[-1].timestamp(), snapshots=snaps, frames=frames, prices={k: float(v.close.iloc[-1]) for k, v in frames.items()})
+    sigs = cs.candidates(ctx)
+    assert {s.symbol for s in sigs} == {"XAUTTMN", "BTCTMN", "ETHTMN"}
+    caps = {s.symbol: s.max_position_pct for s in sigs}
+    assert abs(caps["XAUTTMN"] - 0.4) < 1e-9 and abs(caps["ETHTMN"] - 0.16) < 1e-9
+    # rebalance: run one engine step with an oversized gold position -> partial sell down to the cap
+    from wallex_agent.engine.core import Agent
+    from wallex_agent.execution.broker import SimulatedBroker
+    from wallex_agent.decision_log.logger import DecisionLog
+    from wallex_agent.portfolio.state import Portfolio, Position
+    from wallex_agent.risk.manager import RiskManager
+    from wallex_agent.backtest.runner import _fake_market
+    from datetime import datetime, timedelta, timezone
+    px = ctx.prices["XAUTTMN"]
+    pf = Portfolio(cash_tmn=1_350_000, initial_capital=5_000_000)
+    pf.positions["XAUTTMN"] = Position("XAUTTMN", 3_650_000 / px, px, ctx.now - 3600, px * 0.975, 0.0, 0.0, px, module="carry", last_add_time=ctx.now)
+    risk = RiskManager(settings.risk, datetime.now(timezone.utc) + timedelta(days=2), 45)
+    agent = Agent(settings, pf, risk, None, SimulatedBroker(0.0, 0.0), DecisionLog(str(tmp_path), mode="test"))
+    agent.step(ctx.now, snaps, ctx.prices, {k: _fake_market(k, v) for k, v in ctx.prices.items()}, frames=frames)
+    eq = pf.equity(ctx.prices)
+    gold_share = pf.positions["XAUTTMN"].qty * px / eq
+    assert 0.38 <= gold_share <= 0.41, gold_share            # trimmed from 73% to the 40% basket cap
+    recs = [json.loads(l) for l in open(agent.log.path, encoding="utf-8")]
+    assert any(r["kind"] == "rebalance" for r in recs)

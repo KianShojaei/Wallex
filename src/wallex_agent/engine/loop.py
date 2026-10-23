@@ -83,7 +83,7 @@ def reconcile_positions(s, client: WallexClient, pf: Portfolio, balances: Dict) 
     except WallexError as e:
         log.warning("reconcile: cannot load markets (%s)", e); return notes
     carry_cfg = (s.strategy.modules or {}).get("carry") or {}
-    carry_sym = carry_cfg.get("symbol", "")
+    carry_syms = set((carry_cfg.get("carriers") or {carry_cfg.get("symbol", "XAUTTMN"): 1.0}).keys())
     now = time.time()
     seen = set()
     for asset, b in balances.items():
@@ -121,7 +121,7 @@ def reconcile_positions(s, client: WallexClient, pf: Portfolio, balances: Dict) 
                 entry = cost / q_acc
         except WallexError as e:
             log.warning("reconcile %s: cannot read trades (%s); using mid price as entry", sym, e)
-        is_carry = sym == carry_sym
+        is_carry = sym in carry_syms
         sl_pct = float(carry_cfg.get("stop_loss_pct", s.risk.stop_loss_pct)) if is_carry else s.risk.stop_loss_pct
         tp_pct = float(carry_cfg.get("take_profit_pct", 0) or 0) if is_carry else (s.risk.take_profit_pct or 0)
         pf.positions[sym] = Position(symbol=sym, qty=qty, entry_price=entry, entry_time=now,

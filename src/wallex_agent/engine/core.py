@@ -92,6 +92,24 @@ class Agent:
             self._close(ex.symbol, ex.reason, prices, markets, now)
             summary["exits"].append(ex.symbol)
 
+        # rebalance: a position above its module/basket cap (after a config change or a reconcile) is trimmed to the cap
+        tol = self.s.risk.rebalance_tolerance_pct / 100
+        for sym, p in list(self.pf.positions.items()):
+            cap = None
+            for m in self.modules:
+                if not p.module or m.name == p.module:
+                    cap = m.position_cap_pct(sym)
+                    if cap is not None:
+                        break
+            px = prices.get(sym)
+            if cap is None or px is None:
+                continue
+            value = p.qty * px
+            if value > equity * cap * (1 + tol):
+                excess_qty = (value - equity * cap) / px
+                if excess_qty * px >= self.s.risk.min_order_notional_tmn:
+                    self._reduce(sym, excess_qty, f"rebalance: {value / equity:.1%} of equity > basket cap {cap:.0%}", prices, markets, now)
+
         # periodic "why am I holding" record so the log never goes silent while a position is open
         if self.pf.positions and now - self.last_hold_log >= self.s.strategy.hold_log_minutes * 60:
             self.last_hold_log = now
@@ -253,6 +271,32 @@ class Agent:
                        exit_price=fill.price, qty=fill.qty, pnl_tmn=round(pnl), pnl_pct=round((fill.price / p.entry_price - 1) * 100, 3),
                        held_minutes=round(held_min), entry_decision_id=p.decision_id, fill=fill.__dict__)
         log.info("SELL %s @%s pnl=%.0f TMN (%s)", sym, fill.price, pnl, reason)
+
+    def _reduce(self, sym: str, qty: float, reason: str, prices, markets, now):
+        """Partial sell (rebalance). Realises PnL on the sold part at the position's average entry."""
+        p = self.pf.positions.get(sym)
+        if not p or sym not in markets or qty <= 0:
+            return
+        qty = min(qty, p.qty)
+        m = markets[sym]
+        ref = m.bid if m.bid > 0 else prices[sym]
+        fill = self.broker.sell(sym, qty, m, ref)
+        if not fill.ok:
+            self.log.write("exit_failed", now=now, symbol=sym, reason=reason, error=fill.error)
+            return
+        frac = fill.qty / p.qty if p.qty else 1.0
+        pnl = fill.notional_tmn - fill.fee_tmn - p.paid_tmn * frac
+        self.pf.cash_tmn += fill.notional_tmn - fill.fee_tmn
+        self.pf.fees_paid_tmn += fill.fee_tmn
+        self.pf.realized_pnl_tmn += pnl
+        p.entry_fee_tmn *= (1 - frac)
+        p.qty -= fill.qty
+        if p.qty * (prices.get(sym) or p.entry_price) < self.s.risk.min_order_notional_tmn * 0.5:
+            del self.pf.positions[sym]
+        self.log.write("rebalance", now=now, symbol=sym, broker=self.broker.name, reason=reason, sold_qty=fill.qty, price=fill.price,
+                       proceeds_tmn=round(fill.notional_tmn), pnl_tmn=round(pnl), remaining_qty=p.qty if sym in self.pf.positions else 0.0,
+                       fill=fill.__dict__)
+        log.info("REBALANCE %s sold %s @%s (%s)", sym, fill.qty, fill.price, reason)
 
     def liquidate_all(self, prices, markets, now: Optional[float] = None, reason: str = "manual liquidation"):
         now = now or time.time()

@@ -17,8 +17,8 @@ markets:
   # We deliberately trade only this liquid TMN whitelist (none of them is blocked):
   # NOTE: USDTTMN is READ (regime signal) but the challenge account rejects orders on it (verified 2026-10-23),
   # so it is deliberately NOT in this list. XAUTTMN (Tether Gold) is the tradable carrier of the Toman regime.
-  # Only the carrier is traded while the satellite modules are disabled; keep the loop lean.
-  allowed: [XAUTTMN]
+  # The carry basket: gold + the two most liquid cryptos, all as "USD asset x USDT/TMN" carriers.
+  allowed: [XAUTTMN, BTCTMN, ETHTMN]
   # symbols that are only observed, never traded
   observe: [USDTTMN]
   blocked_file: config/blocked_markets.yaml
@@ -43,7 +43,11 @@ strategy:
     # CORE - Toman-weakening regime -> hold USDT (see docs/research.md for the evidence)
     carry:
       enabled: true
-      symbol: XAUTTMN                   # traded carrier (0% maker fee, ~0.07% spread)
+      # Diversified carrier basket (weights of the module cap). Each carrier has its own trend guard, cap and stop.
+      carriers:
+        XAUTTMN: 0.5                    # Tether Gold: 0% maker fee, ~0.07% spread, lowest vol  -> 40% of equity at the 80% cap
+        BTCTMN: 0.3                     # -> 24% of equity
+        ETHTMN: 0.2                     # -> 16% of equity
       regime_symbol: USDTTMN            # where the Toman-weakening regime is measured (read-only market)
       carrier_ema_hours: 48             # carrier must not be below its own 48h EMA by >0.5%
       carrier_max_24h_drop_pct: 1.5     # ...nor have fallen >1.5% in 24h (gold shock); 2x this = crash exit
@@ -52,10 +56,10 @@ strategy:
       momentum_on_pct: 0.3
       momentum_off_pct: -0.3
       min_score: 0.5
-      base_size_factor: 0.5             # rule floor at score 0.6: 50% of cap = 40% of equity
-      floor_max_size_factor: 0.8        # rule floor at score 1.0: 80% of cap = 64% of equity (linear in between)
+      base_size_factor: 0.5             # rule floor at score 0.6: 50% of each carrier's cap (basket total 40% of equity)
+      floor_max_size_factor: 0.8        # rule floor at score 1.0: 80% of each carrier's cap (basket total 64% of equity)
       floor_min_score: 0.6              # below this score there is no floor; the AI advises above the floor up to the cap
-      max_position_pct: 0.80            # core may use up to 80% of equity (<= risk.max_total_exposure_pct); floor 40-64%, AI sizes the rest
+      max_position_pct: 0.80            # whole basket may use up to 80% of equity (<= risk.max_total_exposure_pct)
       stop_loss_pct: 2.5                # tail protection only; regime exit is the normal way out
       take_profit_pct: 0                # 0 = no fixed take-profit
       trailing_pct: 0
@@ -98,7 +102,8 @@ strategy:
 risk:
   max_position_pct: 0.20                # default cap for modules that do not set their own
   max_total_exposure_pct: 0.80          # dynamic cap: at most 80% of the account in the market, 20% always TMN
-  max_open_positions: 2
+  max_open_positions: 3                 # the three basket carriers
+  rebalance_tolerance_pct: 10           # trim a position when it exceeds its basket cap by >10% (relative)
   stop_loss_pct: 2.0                    # defaults, overridden per module above
   take_profit_pct: 0
   trailing_stop_pct: 0
