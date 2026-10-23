@@ -76,4 +76,6 @@ def test_carry_module_on_trending_usdt(settings, tmp_path):
         assert e["risk_plan"]["notional_tmn"] <= e["equity_before"] * settings.risk.max_total_exposure_pct + 1
         assert e["risk_plan"]["take_profit_pct"] == 0 and e["risk_plan"]["stop_loss_pct"] == 2.5
     assert len([x for x in recs if x["kind"] == "exit"]) == len(entries)
-    assert r.metrics["net_return_pct"] > 0
+    # behaviour, not luck: the rule floor must put at least 40% of equity to work on a strong regime
+    assert max(e["risk_plan"]["notional_tmn"] / e["equity_before"] for e in entries) >= 0.39
+    assert r.metrics["trades"] == len(entries) and r.metrics["max_drawdown_pct"] < 6.0
