@@ -129,10 +129,12 @@ class LiveBroker(Broker):
         cid = f"wa-{int(time.time())}-{uuid.uuid4().hex[:6]}"
         qty_s = f"{qty:.{market.qty_precision}f}"
         price_s = None if price is None else f"{round_price(price, market.price_precision):.{market.price_precision}f}"
+        log.info("placing %s %s qty=%s price=%s client_id=%s", side, symbol, qty_s, price_s, cid)
         try:
             raw = self.c.place_order(symbol, side, self.order_type if price is not None else "MARKET", qty_s, price_s, cid)
         except WallexError as e:
-            return Fill(False, cid, symbol, side, 0, price or 0, 0, 0, "REJECTED", error=str(e))
+            detail = f"{e} payload={e.payload!r}" if e.payload is not None else str(e)
+            return Fill(False, cid, symbol, side, 0, price or 0, 0, 0, "REJECTED", error=detail)
         p = self._parse(raw if isinstance(raw, dict) else {})
         oid = p["id"] or cid
         if p["status"] != "FILLED":

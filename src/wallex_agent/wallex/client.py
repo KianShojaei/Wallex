@@ -127,8 +127,10 @@ class WallexClient:
                 symbol=sym,
                 base=m.get("baseAsset", ""),
                 quote=m.get("quoteAsset", ""),
-                price_precision=int(m.get("quotePrecision", m.get("quoteAssetPrecision", 0)) or 0),
-                qty_precision=int(m.get("baseAssetPrecision", m.get("basePrecision", 8)) or 8),
+                # Wallex: tickSize/stepSize are the number of decimals accepted for price/quantity in orders
+                # (e.g. USDTTMN stepSize=2, tickSize=0); the *AssetPrecision fields are display precision.
+                price_precision=int(m.get("tickSize", m.get("quotePrecision", 0)) or 0),
+                qty_precision=int(m.get("stepSize", m.get("baseAssetPrecision", 8)) or 0),
                 min_qty=_f(m.get("minQty")),
                 min_notional=_f(m.get("minNotional")),
                 bid=_f(st.get("bidPrice")),
