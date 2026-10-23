@@ -74,6 +74,35 @@ class Agent:
         ctx = Context(now=now, snapshots=snapshots, frames=frames or {}, prices=prices, quote_asset=self.s.challenge.quote_asset)
         equity = self.pf.mark(prices, now)
         summary = {"equity": equity, "exits": [], "entries": [], "skipped": []}
+        notes: Dict[str, List[str]] = {}          # per-symbol narrative of this cycle (why acted / why not)
+
+        def note(sym: str, text: str) -> None:
+            notes.setdefault(sym, []).append(text)
+
+        def finish() -> Dict:
+            """Write the per-cycle record: everything the agent saw and concluded this minute."""
+            expl = {}
+            for m in self.modules:
+                try:
+                    expl[m.name] = m.explain(ctx)
+                except Exception as e:  # noqa: BLE001
+                    expl[m.name] = {"error": repr(e)}
+            pos = []
+            for sym, p in self.pf.positions.items():
+                px = prices.get(sym, p.entry_price)
+                pos.append({"symbol": sym, "value_tmn": round(p.qty * px), "share_pct": round(p.qty * px / equity * 100, 1),
+                            "upnl_pct": round(p.unrealized_pct(px), 3), "stop_loss": round(p.stop_loss),
+                            "to_stop_pct": round((px / p.stop_loss - 1) * 100, 2) if p.stop_loss else None,
+                            "age_min": round((now - p.entry_time) / 60)})
+            exposure = self.pf.exposure_tmn(prices)
+            head = f"equity {equity:,.0f} | invested {exposure / equity * 100:.1f}% | cash {self.pf.cash_tmn:,.0f}"
+            acts = (f" | entries {summary['entries']}" if summary["entries"] else "") + (f" | exits {summary['exits']}" if summary["exits"] else "")
+            self.log.write("cycle", now=now, summary=head + acts, equity=round(equity), exposure_pct=round(exposure / equity * 100, 2),
+                           cash_tmn=round(self.pf.cash_tmn), positions=pos, prices={k: round(v, 2) for k, v in prices.items()},
+                           modules=expl, notes=notes, actions={"entries": summary["entries"], "exits": summary["exits"], "blocked": summary["skipped"]},
+                           regimes_ai={k: {"regime": v.regime, "allow": v.allow_entries, "size": v.size_factor, "age_min": round((now - self.regime_ts.get(k, now)) / 60)}
+                                       for k, v in self.regimes.items()})
+            return summary
 
         # kill switch
         if not self.pf.killed and self.risk.should_kill(self.pf, equity):
@@ -90,8 +119,14 @@ class Agent:
                 if h:
                     hints[sym] = h; break
         for ex in self.risk.check_exits(self.pf, prices, hints, now):
+            note(ex.symbol, f"EXIT triggered: {ex.reason}")
             self._close(ex.symbol, ex.reason, prices, markets, now)
             summary["exits"].append(ex.symbol)
+        for sym, p in self.pf.positions.items():
+            px = prices.get(sym, p.entry_price)
+            note(sym, f"holding {p.qty * px:,.0f} TMN ({p.qty * px / equity * 100:.1f}% of equity), uPnL {p.unrealized_pct(px):+.2f}%, "
+                      f"{(px / p.stop_loss - 1) * 100:.2f}% above stop {p.stop_loss:,.0f}; no exit rule fired"
+                      + (f"; module exit hint present: {hints[sym]}" if sym in hints else ""))
 
         # rebalance: a position above its module/basket cap (after a config change, a reconcile or price drift) is trimmed.
         # Fee-free carriers (module cfg `rebalance_symbols`) use a tight band so the basket tracks its target weights with
@@ -109,14 +144,20 @@ class Agent:
                 continue
             free_syms = set((mod.cfg.get("rebalance_symbols") or []) if mod else [])
             tol = float(mod.cfg.get("rebalance_band_pct", 3)) / 100 if sym in free_syms else tol_default
-            if now - self.last_rebalance.get(sym, 0) < self.s.risk.rebalance_cooldown_minutes * 60:
-                continue
             value = p.qty * px
+            if now - self.last_rebalance.get(sym, 0) < self.s.risk.rebalance_cooldown_minutes * 60:
+                note(sym, f"rebalance check skipped: cooldown ({round((self.s.risk.rebalance_cooldown_minutes * 60 - (now - self.last_rebalance[sym])) / 60)} min left)")
+                continue
             if value > equity * cap * (1 + tol):
                 excess_qty = (value - equity * cap) / px
                 if excess_qty * px >= self.s.risk.min_order_notional_tmn:
                     self.last_rebalance[sym] = now
+                    note(sym, f"REBALANCE: {value / equity:.1%} > target {cap:.1%} (+{tol:.0%} band) -> selling {excess_qty * px:,.0f} TMN")
                     self._reduce(sym, excess_qty, f"rebalance: {value / equity:.1%} of equity > target {cap:.0%} (band ±{tol:.0%})", prices, markets, now)
+                else:
+                    note(sym, f"above target {cap:.1%} by {value / equity - cap:.1%} but excess {excess_qty * px:,.0f} TMN < min order; not trimming")
+            else:
+                note(sym, f"weight {value / equity:.1%} within band of target {cap:.1%} (band +{tol:.0%}); no trim")
 
         # periodic "why am I holding" record so the log never goes silent while a position is open
         if self.pf.positions and now - self.last_hold_log >= self.s.strategy.hold_log_minutes * 60:
@@ -137,7 +178,8 @@ class Agent:
         if not ok:
             self.log.write("no_entry", now=now, reasons=blocks, equity=equity)
             summary["skipped"] = blocks
-            return summary
+            note("*", "no new entries this cycle: " + "; ".join(blocks))
+            return finish()
 
         candidates = []
         for m in self.modules:
@@ -145,10 +187,13 @@ class Agent:
                 if sig.symbol not in markets:
                     continue
                 if sig.symbol in self.pf.positions and not sig.allow_top_up:
+                    note(sig.symbol, "already in position and module does not allow top-ups")
                     continue
                 if sig.is_candidate and sig.score >= self.s.strategy.min_signal_score:
                     candidates.append(sig)
+                    note(sig.symbol, f"{m.name}: candidate score {sig.score:.2f}, floor {sig.floor_size_factor:.0%} of cap {sig.max_position_pct:.1%}; " + "; ".join(sig.reasons))
                 else:
+                    note(sig.symbol, f"{m.name}: NOT a candidate (score {sig.score:.2f}): " + "; ".join(sig.vetoes or sig.reasons))
                     self.log.write("scan", now=now, module=m.name, symbol=sig.symbol, score=sig.score, vetoes=sig.vetoes,
                                    reasons=sig.reasons, close=prices.get(sig.symbol))
         candidates.sort(key=lambda x: x.score, reverse=True)
@@ -159,10 +204,14 @@ class Agent:
             if not ok and not (sig.symbol in self.pf.positions and all("max open positions" in b for b in blocks)):
                 self.log.write("no_entry", now=now, symbol=sig.symbol, reasons=blocks); break
             if now < self.retry_after.get(sig.symbol, 0):
+                note(sig.symbol, f"AI/risk said no recently; next consultation in {round((self.retry_after[sig.symbol] - now) / 60)} min")
                 continue                                   # recently rejected: do not spam the AI every loop
             held = self.pf.positions.get(sig.symbol)
             if held is not None and now - getattr(held, "last_add_time", held.entry_time) < self.s.risk.top_up_cooldown_minutes * 60:
+                left = round((self.s.risk.top_up_cooldown_minutes * 60 - (now - getattr(held, "last_add_time", held.entry_time))) / 60)
+                note(sig.symbol, f"top-up not considered: cooldown {left} min left")
                 continue                                   # top-up cooldown: nothing to decide yet
+            note(sig.symbol, "consulting AI (regime + sizing)")
             snap = snapshots[sig.symbol]
             extra = {k: v for k, v in (sig.snapshot or {}).items() if k not in snap.to_dict()}   # module-specific numbers (e.g. carry_r24)
             regime = self._refresh_regime(sig.symbol, snap, recent_bars.get(sig.symbol, []), now, mcp_ctx.get(sig.symbol), sig.module, extra)
@@ -189,30 +238,37 @@ class Agent:
                 size_f, ai_sl, ai_tp, rationale, ddump = 1.0, None, None, "[rule-only] AI disabled", None
             else:
                 ddump = decision.model_dump()
+                note(sig.symbol, f"AI decision: {decision.action} (conf {decision.confidence:.2f}, size {decision.size_factor:.2f}): {decision.rationale}")
                 if decision.action == "reject" and floor <= 0:
                     self.log.write("reject", now=now, symbol=sig.symbol, stage="ai", signal=sig.to_dict(),
                                    regime=regime.model_dump() if regime else None, decision=ddump, ai_used=ai_used)
                     self.retry_after[sig.symbol] = now + retry_min * 60
+                    note(sig.symbol, f"REJECTED by AI (no rule floor); retry in {retry_min} min")
                     continue
                 if decision.action == "reject":
                     self.log.write("ai_overruled", now=now, symbol=sig.symbol, stage="ai", decision=ddump,
                                    reason=f"AI rejected but rule floor {floor:.0%} of cap applies (score {sig.score:.2f})")
+                    note(sig.symbol, f"AI rejected but the rule floor ({floor:.0%} of cap) applies -> sizing at the floor")
                     size_f, ai_sl, ai_tp = 0.0, decision.stop_loss_pct, None
                     rationale = f"[rule floor] {decision.rationale}"
                 else:
                     size_f, ai_sl, ai_tp, rationale = decision.size_factor, decision.stop_loss_pct, decision.take_profit_pct, decision.rationale
+            if regime:
+                note(sig.symbol, f"AI regime: {regime.regime} conf {regime.confidence:.2f}, entries {'allowed' if regime.allow_entries else 'blocked'}, size {regime.size_factor:.2f}: {regime.summary}")
             overrides = {k: getattr(sig, k) for k in ("max_position_pct", "stop_loss_pct", "take_profit_pct", "trailing_pct", "max_holding_minutes", "allow_top_up", "floor_size_factor")}
             regime_sf = 0.0 if (regime and not regime.allow_entries) else (regime.size_factor if regime else 1.0)
-            plan, notes = self.risk.plan_entry(sig.symbol, self.pf, equity, prices, size_f, ai_sl, ai_tp, snap.atr_pct,
-                                               regime_sf, now, overrides)
+            plan, risk_notes = self.risk.plan_entry(sig.symbol, self.pf, equity, prices, size_f, ai_sl, ai_tp, snap.atr_pct,
+                                                    regime_sf, now, overrides)
             if plan is None:
-                self.log.write("reject", now=now, symbol=sig.symbol, stage="risk", signal=sig.to_dict(), decision=ddump, reasons=notes)
+                self.log.write("reject", now=now, symbol=sig.symbol, stage="risk", signal=sig.to_dict(), decision=ddump, reasons=risk_notes)
                 self.retry_after[sig.symbol] = now + retry_min * 60
+                note(sig.symbol, "risk engine: no order -> " + "; ".join(risk_notes))
                 continue
-            self._open(sig, plan, notes, ddump, regime, rationale, prices, markets, now)
+            note(sig.symbol, f"ORDER: buy {plan.notional_tmn:,.0f} TMN (stop {plan.stop_loss_pct}%) -> " + "; ".join(risk_notes))
+            self._open(sig, plan, risk_notes, ddump, regime, rationale, prices, markets, now)
             summary["entries"].append(sig.symbol)
             equity = self.pf.equity(prices)
-        return summary
+        return finish()
 
     # ----------------------------------------------------------------- execution
     def _tradable(self, symbol: str) -> bool:

@@ -65,3 +65,7 @@ class StrategyModule:
     def position_cap_pct(self, symbol: str) -> Optional[float]:
         """Per-symbol cap (fraction of equity) if the module defines one; used to trim oversized positions."""
         return None
+
+    def explain(self, ctx: Context) -> Dict:
+        """Full picture of what the module sees this step (for the per-cycle decision log)."""
+        return {}

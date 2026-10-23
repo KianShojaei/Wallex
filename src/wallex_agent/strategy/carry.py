@@ -188,6 +188,32 @@ class CarryStrategy(StrategyModule):
                               allow_top_up=bool(self.cfg.get("allow_top_up", False))))
         return out
 
+    def explain(self, ctx: Context) -> Dict:
+        st = self._state(ctx)
+        if st is None:
+            return {"regime": None, "note": f"not enough {self.regime_symbol} history yet"}
+        score = self._score(st) if st["regime_up"] else 0.0
+        floor = 0.0
+        if st["regime_up"] and score >= self.floor_min_score:
+            t = (score - self.floor_min_score) / max(1e-9, 1.0 - self.floor_min_score)
+            floor = round(self.base_size_factor + (self.floor_max_size_factor - self.base_size_factor) * _clip(t), 3)
+        out = {
+            "regime_symbol": self.regime_symbol,
+            "regime": {"state": "UP" if st["regime_up"] else ("OFF" if st["regime_off"] else "NEUTRAL"),
+                       "price": round(st["px"]), f"ema{self.ema_n}": round(st["ema"]), "dist_to_ema_pct": round(st["dist_pct"], 3),
+                       "ret_24h_pct": round(st["r24"], 3), "ret_72h_pct": round(st["r72"], 3), "vol_24h_pct": round(st["vol24"], 3),
+                       "score": round(score, 3), "rule_floor_of_cap": floor, "basket_cap_of_equity": self.module_cap,
+                       "rule": f"UP if price>EMA{self.ema_n} or 24h>{self.mom_on}% ; OFF if price<EMA{self.ema_n} and 24h<{self.mom_off}%"},
+            "carriers": {},
+        }
+        for sym, base_w in self.carriers.items():
+            car = self._carrier_state(sym, ctx)
+            w = self.weights.get(sym, base_w)
+            out["carriers"][sym] = {"base_weight": base_w, "weight": round(w, 3), "cap_of_equity": round(self.module_cap * w, 3),
+                                    "floor_of_equity": round(self.module_cap * w * floor, 3), "guard_ok": car.get("ok"),
+                                    "guard": car.get("note"), "usd_ret_72h_pct": (lambda r: round(r, 3) if r is not None else None)(self._usd_return(sym, ctx))}
+        return out
+
     def exit_hint(self, symbol: str, ctx: Context) -> Optional[str]:
         if symbol not in self.carriers:
             return None

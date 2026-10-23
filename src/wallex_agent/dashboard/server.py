@@ -70,7 +70,9 @@ class DashboardState:
 def _compact(r: dict) -> dict:
     """Keep the dashboard payload small: drop bulky prompt copies, keep the human-readable parts."""
     keep = {k: r.get(k) for k in ("id", "ts", "kind", "symbol", "module", "stage", "reason", "reasons", "why", "pnl_tmn", "pnl_pct",
-                                  "held_minutes", "entry_price", "exit_price", "qty", "score", "vetoes", "equity_before", "equity")}
+                                  "held_minutes", "entry_price", "exit_price", "qty", "score", "vetoes", "equity_before", "equity",
+                                  "summary", "notes", "modules", "value_tmn", "exposure_pct", "upnl_pct", "distance_to_stop_pct",
+                                  "sold_qty", "price", "proceeds_tmn")}
     if r.get("ai_decision"):
         d = r["ai_decision"]; keep["ai"] = {k: d.get(k) for k in ("action", "confidence", "size_factor", "rationale", "key_risks")}
     if r.get("decision"):

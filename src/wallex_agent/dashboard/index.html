@@ -36,7 +36,9 @@
   td.num{direction:ltr;text-align:right;font-variant-numeric:tabular-nums} tbody tr:hover td{background:var(--card2)}
   .badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--line);color:var(--muted);background:var(--card2)}
   .badge.entry,.badge.top_up{color:var(--green);border-color:rgba(34,197,94,.45)} .badge.exit{color:var(--blue);border-color:rgba(59,130,246,.45)}
-  .badge.reject,.badge.no_entry,.badge.scan{color:var(--amber);border-color:rgba(245,158,11,.45)} .badge.regime,.badge.ai_overruled{color:var(--violet);border-color:rgba(139,92,246,.45)}
+  .badge.reject,.badge.no_entry,.badge.scan{color:var(--amber);border-color:rgba(245,158,11,.45)} .badge.regime,.badge.ai_overruled{color:var(--violet);border-color:rgba(139,92,246,.45)} .badge.cycle,.badge.hold,.badge.reconcile,.badge.rebalance{color:var(--muted)}
+  details.cyc summary{cursor:pointer;list-style:none} details.cyc summary::-webkit-details-marker{display:none} details.cyc[open] summary{color:var(--fg)}
+  .cyc ul{margin:6px 0 0;padding-inline-start:14px} .cyc li{margin:2px 0} .cyc b.sym{color:var(--fg)}
   .badge.error,.badge.kill_switch,.badge.exit_failed,.badge.entry_failed{color:var(--red);border-color:rgba(239,68,68,.5)}
   .small{font-size:12px;color:var(--muted)} .ltr{direction:ltr;text-align:left} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
   svg{width:100%;height:150px;display:block} .scroll{max-height:520px;overflow:auto;border-radius:10px}
@@ -87,7 +89,7 @@
 
 <div class="card" style="margin-top:12px">
   <div class="title"><span>لاگ تصمیم · چرا خرید، چرا فروخت، چرا نه</span>
-    <label class="small">فیلتر: <select id="kind"><option value="">همه</option><option value="entry,top_up,exit">معاملات</option><option value="reject,no_entry">ردها</option><option value="regime">رژیم AI</option><option value="scan">اسکن</option><option value="error,kill_switch,exit_failed,entry_failed">خطاها</option></select></label></div>
+    <label class="small">فیلتر: <select id="kind"><option value="">همه</option><option value="entry,top_up,exit">معاملات</option><option value="reject,no_entry">ردها</option><option value="regime">رژیم AI</option><option value="scan">اسکن</option><option value="cycle">هر چرخه (تحلیل کامل)</option><option value="hold,rebalance,reconcile">نگهداری/بازتوازن</option><option value="entry,top_up,exit,rebalance,reject,regime,ai_overruled,no_entry,hold,reconcile,run_start,run_stop,error,kill_switch">همه بدون چرخه</option><option value="error,kill_switch,exit_failed,entry_failed">خطاها</option></select></label></div>
   <div class="scroll"><table><thead><tr><th style="width:150px">زمان (UTC)</th><th style="width:90px">نوع</th><th style="width:90px">نماد</th><th>توضیح</th></tr></thead><tbody id="decisions"></tbody></table></div>
 </div>
 <footer>Wallex Agent · هکاتون Agentic AI استارکوچ · <span id="commit"></span> · MCP: <code class="mono">/mcp</code></footer>
@@ -146,6 +148,12 @@ async function load(){
       if(d.kind==="regime")txt=`<span class="badge regime">${d.regime?.regime}</span> اطمینان ${d.regime?.confidence} · ${d.regime?.allow_entries?"ورود ✅":"ورود ⛔"} · <span class="ltr">${d.regime?.summary||""}</span>`;
       if(d.kind==="no_entry")txt=(d.reasons||[]).join("; ");
       if(d.kind==="ai_overruled")txt=`<span class="ltr">${d.reason}</span>`;
+      if(d.kind==="hold")txt=`${fmt(d.value_tmn)} تومان (${d.exposure_pct}%) · سود/زیان ${pct(d.upnl_pct)} · ${d.distance_to_stop_pct}% تا حد ضرر · <span class="ltr">${d.reason||""}</span>`;
+      if(d.kind==="rebalance")txt=`فروش ${d.sold_qty} @ ${fmt(d.price)} → ${fmt(d.proceeds_tmn)} تومان (PnL ${fmt(d.pnl_tmn)}) · <span class="ltr">${d.reason}</span>`;
+      if(d.kind==="reconcile")txt=`${d.qty!=null?`qty ${d.qty} @ ${fmt(d.entry_price)} = ${fmt(d.value_tmn)} تومان · `:""}<span class="ltr">${d.reason}</span>`;
+      if(d.kind==="cycle"){const m=(d.modules||{}).carry||{},rg=m.regime||{};const cars=Object.entries(m.carriers||{}).map(([s,c])=>`<li><b class="sym">${s}</b>: وزن ${Math.round((c.weight||0)*100)}% · سقف ${Math.round((c.cap_of_equity||0)*100)}% · کف ${Math.round((c.floor_of_equity||0)*100)}% · گارد ${c.guard_ok?"✅":"⛔"} <span class="ltr">${c.guard||""}</span>${c.usd_ret_72h_pct!=null?` · دلاری ۷۲h ${pct(c.usd_ret_72h_pct)}`:""}</li>`).join("");
+        const nts=Object.entries(d.notes||{}).map(([s,arr])=>`<li><b class="sym">${s}</b>: ${arr.map(x=>`<span class="ltr">${x}</span>`).join(" ⟶ ")}</li>`).join("");
+        txt=`<details class="cyc"><summary><span class="ltr">${d.summary||""}</span> · رژیم <b>${rg.state||"?"}</b> score ${rg.score??"—"} · 24h ${pct(rg.ret_24h_pct)} · 72h ${pct(rg.ret_72h_pct)} · فاصله از EMA ${pct(rg.dist_to_ema_pct)} <span class="small">(کلیک برای جزئیات)</span></summary><ul>${cars}${nts}</ul></details>`}
       if(d.ai&&d.kind!=="reject")txt+=` <span class="small">[AI ${d.ai.action} · ${d.ai.confidence}]</span>`;
       return `<tr><td class="num small mono">${d.ts?d.ts.replace("T"," ").replace("Z",""):""}</td><td><span class="badge ${d.kind}">${d.kind}</span></td><td>${d.symbol||""}</td><td class="small" style="text-align:right">${txt}</td></tr>`}).join(""):`<tr><td colspan="4" class="empty">رکوردی نیست</td></tr>`;
   }catch(e){document.getElementById("meta").textContent="خطا در خواندن وضعیت: "+e}
