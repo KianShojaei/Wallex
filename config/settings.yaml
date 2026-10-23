@@ -61,10 +61,10 @@ strategy:
       momentum_on_pct: 0.3
       momentum_off_pct: -0.3
       min_score: 0.5
-      base_size_factor: 0.6             # rule floor at score 0.6: 60% of each carrier's cap (basket total 60% of equity)
-      floor_max_size_factor: 1.0        # rule floor at score 1.0: full cap (basket total 100% of equity)
+      base_size_factor: 0.842           # rule floor at score 0.6: 84.2% of the 95% cap = 80% of equity
+      floor_max_size_factor: 1.0        # rule floor at score 1.0: full cap = 95% of equity (AI sizes in between)
       floor_min_score: 0.6              # below this score there is no floor; the AI advises above the floor up to the cap
-      max_position_pct: 1.00            # whole basket may use up to 100% of equity (team decision 2026-10-23: no TMN cash buffer)
+      max_position_pct: 0.95            # whole basket may use up to 95% of equity (team decision 2026-10-23: 80-95% invested, >=5% TMN)
       rebalance_symbols: [XAUTTMN]      # only the 0%-maker-fee carrier is actively rebalanced to its target weight
       rebalance_band_pct: 3             # ...whenever its weight drifts more than ±3% (relative) from target, at most every 30 min
       stop_loss_pct: 2.5                # tail protection only; regime exit is the normal way out
@@ -108,7 +108,7 @@ strategy:
 
 risk:
   max_position_pct: 0.20                # default cap for modules that do not set their own
-  max_total_exposure_pct: 1.00          # team decision: the whole account may be in the market (no TMN buffer)
+  max_total_exposure_pct: 0.95          # team decision: 80-95% in the market by regime strength, at least 5% TMN
   max_open_positions: 3                 # the three basket carriers
   rebalance_tolerance_pct: 10           # trim ANY position when it exceeds its basket cap by >10% (relative); fee-free carriers use the tighter band above
   stop_loss_pct: 2.0                    # defaults, overridden per module above
